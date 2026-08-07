@@ -39,16 +39,23 @@ def get_mark_price(symbol, asset_type):
         return 0.0
 
 def update_history(total_val):
+    """Always keeps today's value up-to-date."""
     today = datetime.now().strftime('%Y-%m-%d')
+    
     if os.path.exists(HISTORY_FILE):
         hist_df = pd.read_csv(HISTORY_FILE)
     else:
         hist_df = pd.DataFrame(columns=["Date", "Value"])
 
-    if today not in hist_df['Date'].values:
+    if today in hist_df['Date'].values:
+        # Update the existing entry for today
+        hist_df.loc[hist_df['Date'] == today, 'Value'] = total_val
+    else:
+        # First entry of the day
         new_entry = pd.DataFrame([{"Date": today, "Value": total_val}])
         hist_df = pd.concat([hist_df, new_entry], ignore_index=True)
-        hist_df.to_csv(HISTORY_FILE, index=False)
+
+    hist_df.to_csv(HISTORY_FILE, index=False)
     return hist_df
 
 # --- SIDEBAR: INPUTS ---
@@ -202,7 +209,7 @@ if not holdings.empty:
     st.plotly_chart(
         fig,
         use_container_width=True,
-        config={'displayModeBar': False}  # completely hides zoom/pan toolbar
+        config={'displayModeBar': False}
     )
 
     st.subheader("Current Positions")
