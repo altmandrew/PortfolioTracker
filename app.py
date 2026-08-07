@@ -58,7 +58,6 @@ with st.sidebar.expander("➕ Add Asset", expanded=True):
     with st.form("add_asset"):
         a_type = st.selectbox("Asset Type", ["Stock", "ETF", "Option", "Cash"])
         
-        # Dynamic help text for Cash
         if a_type == "Cash":
             st.caption("For Cash: Quantity = dollar amount (e.g. 5000 for $5,000)")
             default_sym = "CASH"
@@ -75,7 +74,6 @@ with st.sidebar.expander("➕ Add Asset", expanded=True):
             if a_type != "Cash" and not sym:
                 st.error("Symbol is required for stocks, ETFs, and options")
             else:
-                # Force clean values for Cash
                 if a_type == "Cash":
                     sym = sym if sym else "CASH"
                     cost = 1.0
@@ -195,9 +193,17 @@ if not holdings.empty:
         template="plotly_dark",
         height=400,
         margin=dict(l=0, r=0, t=20, b=0),
-        yaxis_title="Portfolio Value ($)"
+        yaxis_title="Portfolio Value ($)",
+        xaxis=dict(fixedrange=True),
+        yaxis=dict(fixedrange=True),
+        dragmode=False
     )
-    st.plotly_chart(fig, use_container_width=True)
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config={'displayModeBar': False}  # completely hides zoom/pan toolbar
+    )
 
     st.subheader("Current Positions")
     display_cols = [c for c in holdings.columns if c != "Multiplier"]
