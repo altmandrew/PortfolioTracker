@@ -39,7 +39,6 @@ def get_mark_price(symbol, asset_type):
         return 0.0
 
 def update_history(total_val):
-    """Saves a daily snapshot of the total value."""
     today = datetime.now().strftime('%Y-%m-%d')
     if os.path.exists(HISTORY_FILE):
         hist_df = pd.read_csv(HISTORY_FILE)
@@ -57,18 +56,39 @@ st.sidebar.header("📥 Portfolio Management")
 
 with st.sidebar.expander("➕ Add Asset", expanded=True):
     with st.form("add_asset"):
-        sym = st.text_input("Symbol (e.g., AAPL or MSFT240920C00400000)").upper().strip()
         a_type = st.selectbox("Asset Type", ["Stock", "ETF", "Option", "Cash"])
+        
+        # Dynamic help text for Cash
+        if a_type == "Cash":
+            st.caption("For Cash: Quantity = dollar amount (e.g. 5000 for $5,000)")
+            default_sym = "CASH"
+            default_cost = 1.0
+        else:
+            default_sym = ""
+            default_cost = 0.0
+
+        sym = st.text_input("Symbol (e.g., AAPL or MSFT240920C00400000)", value=default_sym).upper().strip()
         qty = st.number_input("Quantity", min_value=0.0, step=1.0, value=0.0)
-        cost = st.number_input("Avg Cost", min_value=0.0, value=0.0)
+        cost = st.number_input("Avg Cost", min_value=0.0, value=default_cost)
+
         if st.form_submit_button("Add to Portfolio"):
-            if not sym:
-                st.error("Symbol is required")
+            if a_type != "Cash" and not sym:
+                st.error("Symbol is required for stocks, ETFs, and options")
             else:
+                # Force clean values for Cash
+                if a_type == "Cash":
+                    sym = sym if sym else "CASH"
+                    cost = 1.0
+
                 df = load_holdings()
-                new_row = pd.DataFrame([{"Symbol": sym, "Type": a_type, "Quantity": qty, "Average Cost": cost}])
+                new_row = pd.DataFrame([{
+                    "Symbol": sym,
+                    "Type": a_type,
+                    "Quantity": qty,
+                    "Average Cost": cost
+                }])
                 save_holdings(pd.concat([df, new_row], ignore_index=True))
-                st.success(f"Added {sym}")
+                st.success(f"Added {sym} ({a_type})")
                 st.rerun()
 
 with st.sidebar.expander("📂 Upload Spreadsheet"):
@@ -112,7 +132,7 @@ if not holdings.empty:
     with st.spinner("Updating Mark Values..."):
         holdings['Price'] = holdings.apply(lambda x: get_mark_price(x['Symbol'], x['Type']), axis=1)
 
-        # --- KEY CHANGE: Options are multiplied by 100 ---
+        # Options ×100, everything else ×1
         holdings['Multiplier'] = holdings['Type'].apply(lambda t: 100 if t == "Option" else 1)
         holdings['Market Value'] = holdings['Price'] * holdings['Quantity'] * holdings['Multiplier']
         holdings['P&L ($)'] = (holdings['Price'] - holdings['Average Cost']) * holdings['Quantity'] * holdings['Multiplier']
@@ -180,7 +200,6 @@ if not holdings.empty:
     st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("Current Positions")
-    # Hide the helper Multiplier column from the table
     display_cols = [c for c in holdings.columns if c != "Multiplier"]
     st.dataframe(
         holdings[display_cols].style.format({
