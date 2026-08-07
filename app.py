@@ -111,10 +111,14 @@ holdings = load_holdings()
 if not holdings.empty:
     with st.spinner("Updating Mark Values..."):
         holdings['Price'] = holdings.apply(lambda x: get_mark_price(x['Symbol'], x['Type']), axis=1)
-        holdings['Market Value'] = holdings['Price'] * holdings['Quantity']
+
+        # --- KEY CHANGE: Options are multiplied by 100 ---
+        holdings['Multiplier'] = holdings['Type'].apply(lambda t: 100 if t == "Option" else 1)
+        holdings['Market Value'] = holdings['Price'] * holdings['Quantity'] * holdings['Multiplier']
+        holdings['P&L ($)'] = (holdings['Price'] - holdings['Average Cost']) * holdings['Quantity'] * holdings['Multiplier']
+
         total_value = holdings['Market Value'].sum()
         holdings['Weight (%)'] = (holdings['Market Value'] / total_value * 100) if total_value > 0 else 0
-        holdings['P&L ($)'] = (holdings['Price'] - holdings['Average Cost']) * holdings['Quantity']
         total_pnl = holdings['P&L ($)'].sum()
 
     hist_df = update_history(total_value)
@@ -176,8 +180,10 @@ if not holdings.empty:
     st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("Current Positions")
+    # Hide the helper Multiplier column from the table
+    display_cols = [c for c in holdings.columns if c != "Multiplier"]
     st.dataframe(
-        holdings.style.format({
+        holdings[display_cols].style.format({
             "Price": "${:,.2f}",
             "Market Value": "${:,.2f}",
             "Weight (%)": "{:.1f}%",
