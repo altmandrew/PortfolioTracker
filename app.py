@@ -203,22 +203,29 @@ def import_brokerage_csv(uploaded_file):
     return pd.DataFrame(records)
 
 def merge_holdings(existing: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
-    """Add new positions to existing ones. Same symbol → average cost weighted + sum qty."""
+    """Add new positions to existing ones. Same symbol → sum quantities + weighted average cost."""
     if existing.empty:
-        return new
+        return new.copy()
 
     combined = pd.concat([existing, new], ignore_index=True)
 
-    def weighted_avg(group):
-        total_qty = group["Quantity"].sum()
-        if total_qty == 0:
-            return 0
-        return (group["Quantity"] * group["Average Cost"]).sum() / total_qty
+    # Calculate total cost for weighted average
+    combined["TotalCost"] = combined["Quantity"] * combined["Average Cost"]
 
     merged = combined.groupby(["Symbol", "Type"], as_index=False).agg({
         "Quantity": "sum",
-        "Average Cost": weighted_avg
+        "TotalCost": "sum"
     })
+
+    # Recalculate average cost
+    merged["Average Cost"] = merged.apply(
+        lambda row: row["TotalCost"] / row["Quantity"] if row["Quantity"] != 0 else 0,
+        axis=1
+    )
+
+    merged = merged.drop(columns=["TotalCost"])
+    merged["Average Cost"] = merged["Average Cost"].round(4)
+
     return merged
 
 # --- SIDEBAR ---
