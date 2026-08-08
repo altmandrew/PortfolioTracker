@@ -8,7 +8,7 @@ import re
 import io
 import numpy as np
 
-st.set_page_config(layout="wide", page_title="Pro Portfolio Tracker")
+st.set_page_config(layout="wide", page_title="Portfolio Pulse")
 
 # -------------------- SIMPLE PASSWORD LOGIN --------------------
 def check_password():
