@@ -7,6 +7,45 @@ import os
 
 st.set_page_config(layout="wide", page_title="Pro Portfolio Tracker")
 
+# -------------------- SIMPLE PASSWORD LOGIN --------------------
+def check_password():
+    """Returns `True` if the user had the correct password."""
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if st.session_state["password"] == st.secrets["password"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # don't store password
+        else:
+            st.session_state["password_correct"] = False
+
+    # First run or wrong password → show input
+    if "password_correct" not in st.session_state:
+        st.text_input(
+            "Enter Password", 
+            type="password", 
+            on_change=password_entered, 
+            key="password"
+        )
+        return False
+    
+    elif not st.session_state["password_correct"]:
+        # Password incorrect
+        st.text_input(
+            "Enter Password", 
+            type="password", 
+            on_change=password_entered, 
+            key="password"
+        )
+        st.error("😕 Password incorrect")
+        return False
+    
+    else:
+        # Password correct
+        return True
+
+if not check_password():
+    st.stop()  # Do not continue if check_password is not True.
+# -------------------- END LOGIN --------------------
 # --- FILE PATHS ---
 HOLDINGS_FILE = "my_holdings.csv"
 HISTORY_FILE = "portfolio_history.csv"
