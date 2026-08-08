@@ -301,7 +301,7 @@ if st.sidebar.button("🗑️ Reset All Data", type="secondary"):
     st.rerun()
 
 # --- MAIN DASHBOARD ---
-st.title("📈 Professional Investment Tracker")
+st.title("📈 Portfolio Pulse")
 
 holdings = load_holdings()
 total_value = 0.0
