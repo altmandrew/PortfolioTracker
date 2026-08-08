@@ -4,48 +4,33 @@ import yfinance as yf
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
+import re
 
 st.set_page_config(layout="wide", page_title="Pro Portfolio Tracker")
 
 # -------------------- SIMPLE PASSWORD LOGIN --------------------
 def check_password():
-    """Returns `True` if the user had the correct password."""
     def password_entered():
-        """Checks whether a password entered by the user is correct."""
         if st.session_state["password"] == st.secrets["password"]:
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # don't store password
+            del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
 
-    # First run or wrong password → show input
     if "password_correct" not in st.session_state:
-        st.text_input(
-            "Enter Password", 
-            type="password", 
-            on_change=password_entered, 
-            key="password"
-        )
+        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
         return False
-    
     elif not st.session_state["password_correct"]:
-        # Password incorrect
-        st.text_input(
-            "Enter Password", 
-            type="password", 
-            on_change=password_entered, 
-            key="password"
-        )
+        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
         st.error("😕 Password incorrect")
         return False
-    
     else:
-        # Password correct
         return True
 
 if not check_password():
-    st.stop()  # Do not continue if check_password is not True.
+    st.stop()
 # -------------------- END LOGIN --------------------
+
 # --- FILE PATHS ---
 HOLDINGS_FILE = "my_holdings.csv"
 HISTORY_FILE = "portfolio_history.csv"
@@ -59,10 +44,54 @@ def load_holdings():
 def save_holdings(df):
     df.to_csv(HOLDINGS_FILE, index=False)
 
+def convert_option_to_occ(symbol: str) -> str:
+    """
+    Convert human-readable option symbols to OCC format for yfinance.
+    Example: "TQQQ 01/21/2028 60.00 C" → "TQQQ260121C00060000"
+    """
+    symbol = symbol.strip().upper()
+
+    # Already looks like OCC?
+    if re.match(r"^[A-Z]{1,6}\d{6}[CP]\d{8}$", symbol):
+        return symbol
+
+    # Common brokerage format: ROOT MM/DD/YYYY STRIKE C/P
+    patterns = [
+        r"([A-Z]+)\s+(\d{1,2})/(\d{1,2})/(\d{2,4})\s+([\d.]+)\s*([CP])",
+        r"([A-Z]+)\s+(\d{1,2})-(\d{1,2})-(\d{2,4})\s+([\d.]+)\s*([CP])",
+        r"([A-Z]+)(\d{6})([CP])(\d+)",  # already partial
+    ]
+
+    for pat in patterns:
+        match = re.search(pat, symbol)
+        if match:
+            groups = match.groups()
+            if len(groups) == 6:
+                root, month, day, year, strike, cp = groups
+                year = int(year)
+                if year < 100:
+                    year += 2000
+                yy = f"{year % 100:02d}"
+                mm = f"{int(month):02d}"
+                dd = f"{int(day):02d}"
+                strike_int = int(float(strike) * 1000)
+                strike_str = f"{strike_int:08d}"
+                return f"{root}{yy}{mm}{dd}{cp}{strike_str}"
+            elif len(groups) == 4:
+                # Already close to OCC
+                return symbol
+
+    # Fallback – return original (price fetch will just fail gracefully)
+    return symbol
+
 def get_mark_price(symbol, asset_type):
     if asset_type == "Cash":
         return 1.0
     try:
+        # Convert option symbols on the fly
+        if asset_type == "Option":
+            symbol = convert_option_to_occ(symbol)
+
         ticker = yf.Ticker(symbol)
         if asset_type == "Option":
             info = ticker.info
@@ -79,50 +108,134 @@ def get_mark_price(symbol, asset_type):
 
 def update_history(total_val):
     """Always keeps today's value up-to-date."""
-    today = datetime.now().strftime('%Y-%m-%d')
-    
+    today = datetime.now().strftime("%Y-%m-%d")
     if os.path.exists(HISTORY_FILE):
         hist_df = pd.read_csv(HISTORY_FILE)
     else:
         hist_df = pd.DataFrame(columns=["Date", "Value"])
 
-    if today in hist_df['Date'].values:
-        # Update the existing entry for today
-        hist_df.loc[hist_df['Date'] == today, 'Value'] = total_val
+    if today in hist_df["Date"].values:
+        hist_df.loc[hist_df["Date"] == today, "Value"] = total_val
     else:
-        # First entry of the day
         new_entry = pd.DataFrame([{"Date": today, "Value": total_val}])
         hist_df = pd.concat([hist_df, new_entry], ignore_index=True)
 
     hist_df.to_csv(HISTORY_FILE, index=False)
     return hist_df
 
-# --- SIDEBAR: INPUTS ---
+def import_brokerage_csv(uploaded_file):
+    """
+    Smart importer for common brokerage position CSVs + automatic OCC conversion.
+    """
+    content = uploaded_file.getvalue().decode("utf-8")
+    lines = content.splitlines()
+
+    header_idx = None
+    for i, line in enumerate(lines):
+        if "Symbol" in line and ("Qty" in line or "Quantity" in line):
+            header_idx = i
+            break
+
+    if header_idx is None:
+        raise ValueError("Could not find a header row containing 'Symbol'")
+
+    df = pd.read_csv(uploaded_file, skiprows=header_idx)
+    df.columns = [c.strip() for c in df.columns]
+
+    symbol_col = next((c for c in df.columns if "Symbol" in c), None)
+    qty_col    = next((c for c in df.columns if "Qty" in c or "Quantity" in c), None)
+    cost_col   = next((c for c in df.columns if "Cost Basis" in c), None)
+    type_col   = next((c for c in df.columns if "Asset Type" in c or "Type" in c), None)
+    mkt_col    = next((c for c in df.columns if "Mkt Val" in c or "Market Value" in c), None)
+
+    if not all([symbol_col, qty_col, cost_col]):
+        raise ValueError("CSV missing required columns (Symbol, Qty/Quantity, Cost Basis)")
+
+    records = []
+
+    for _, row in df.iterrows():
+        symbol = str(row[symbol_col]).strip()
+        if not symbol or symbol.lower() in ["nan", "positions total", "--", ""]:
+            continue
+
+        asset_type_raw = str(row[type_col]).lower() if type_col else ""
+        desc = str(row.get("Description", "")).lower()
+
+        if "cash" in asset_type_raw or "cash" in symbol.lower() or "cash" in desc:
+            h_type = "Cash"
+        elif "option" in asset_type_raw:
+            h_type = "Option"
+        elif "etf" in asset_type_raw or "closed end" in asset_type_raw:
+            h_type = "ETF"
+        else:
+            h_type = "Stock"
+
+        if h_type == "Cash":
+            raw_val = str(row[mkt_col]) if mkt_col else "0"
+            qty = float(raw_val.replace("$", "").replace(",", "").strip() or 0)
+            avg_cost = 1.0
+            symbol = "CASH"
+        else:
+            qty_str = str(row[qty_col]).replace(",", "").strip()
+            try:
+                qty = float(qty_str)
+            except:
+                continue
+            if qty == 0:
+                continue
+
+            cost_str = str(row[cost_col]).replace("$", "").replace(",", "").strip()
+            try:
+                total_cost = float(cost_str)
+            except:
+                total_cost = 0.0
+
+            if h_type == "Option":
+                # Convert symbol to OCC format
+                symbol = convert_option_to_occ(symbol)
+                avg_cost = total_cost / (qty * 100) if qty > 0 else 0
+            else:
+                avg_cost = total_cost / qty if qty > 0 else 0
+
+        records.append({
+            "Symbol": symbol,
+            "Type": h_type,
+            "Quantity": qty,
+            "Average Cost": round(avg_cost, 4)
+        })
+
+    if not records:
+        raise ValueError("No valid positions found in the file")
+
+    return pd.DataFrame(records)
+
+# --- SIDEBAR ---
 st.sidebar.header("📥 Portfolio Management")
 
-with st.sidebar.expander("➕ Add Asset", expanded=True):
+with st.sidebar.expander("➕ Add Asset", expanded=False):
     with st.form("add_asset"):
         a_type = st.selectbox("Asset Type", ["Stock", "ETF", "Option", "Cash"])
-        
         if a_type == "Cash":
-            st.caption("For Cash: Quantity = dollar amount (e.g. 5000 for $5,000)")
+            st.caption("Quantity = dollar amount")
             default_sym = "CASH"
             default_cost = 1.0
         else:
             default_sym = ""
             default_cost = 0.0
 
-        sym = st.text_input("Symbol (e.g., AAPL or MSFT240920C00400000)", value=default_sym).upper().strip()
+        sym = st.text_input("Symbol", value=default_sym).upper().strip()
         qty = st.number_input("Quantity", min_value=0.0, step=1.0, value=0.0)
-        cost = st.number_input("Avg Cost", min_value=0.0, value=default_cost)
+        cost = st.number_input("Avg Cost (per share/contract)", min_value=0.0, value=default_cost)
 
         if st.form_submit_button("Add to Portfolio"):
             if a_type != "Cash" and not sym:
-                st.error("Symbol is required for stocks, ETFs, and options")
+                st.error("Symbol required")
             else:
                 if a_type == "Cash":
-                    sym = sym if sym else "CASH"
+                    sym = "CASH"
                     cost = 1.0
+                if a_type == "Option":
+                    sym = convert_option_to_occ(sym)
 
                 df = load_holdings()
                 new_row = pd.DataFrame([{
@@ -132,28 +245,25 @@ with st.sidebar.expander("➕ Add Asset", expanded=True):
                     "Average Cost": cost
                 }])
                 save_holdings(pd.concat([df, new_row], ignore_index=True))
-                st.success(f"Added {sym} ({a_type})")
+                st.success(f"Added {sym}")
                 st.rerun()
 
-with st.sidebar.expander("📂 Upload Spreadsheet"):
-    file = st.file_uploader("Upload CSV (Symbol, Type, Quantity, Average Cost)")
+with st.sidebar.expander("📂 Upload Brokerage CSV", expanded=True):
+    file = st.file_uploader("Upload CSV (Fidelity, Schwab, etc.)", type=["csv"])
     if file:
         try:
-            df_upload = pd.read_csv(file)
-            required = {"Symbol", "Type", "Quantity", "Average Cost"}
-            if not required.issubset(df_upload.columns):
-                st.error(f"CSV must contain columns: {required}")
-            else:
-                save_holdings(df_upload)
-                st.success("Uploaded successfully!")
-                st.rerun()
+            df_upload = import_brokerage_csv(file)
+            save_holdings(df_upload)
+            st.success(f"Imported {len(df_upload)} positions")
+            st.dataframe(df_upload, use_container_width=True)
+            st.rerun()
         except Exception as e:
-            st.error(f"Upload failed: {e}")
+            st.error(f"Import failed: {e}")
 
 holdings_preview = load_holdings()
 if not holdings_preview.empty:
     with st.sidebar.expander("🗑️ Delete Holding"):
-        to_delete = st.selectbox("Select symbol to delete", holdings_preview["Symbol"].tolist())
+        to_delete = st.selectbox("Select symbol", holdings_preview["Symbol"].tolist())
         if st.button("Delete selected", type="primary"):
             holdings_preview = holdings_preview[holdings_preview["Symbol"] != to_delete]
             save_holdings(holdings_preview)
@@ -161,10 +271,9 @@ if not holdings_preview.empty:
             st.rerun()
 
 if st.sidebar.button("🗑️ Reset All Data", type="secondary"):
-    if os.path.exists(HOLDINGS_FILE):
-        os.remove(HOLDINGS_FILE)
-    if os.path.exists(HISTORY_FILE):
-        os.remove(HISTORY_FILE)
+    for f in [HOLDINGS_FILE, HISTORY_FILE]:
+        if os.path.exists(f):
+            os.remove(f)
     st.rerun()
 
 # --- MAIN DASHBOARD ---
@@ -173,17 +282,18 @@ st.title("📈 Professional Investment Tracker")
 holdings = load_holdings()
 
 if not holdings.empty:
-    with st.spinner("Updating Mark Values..."):
-        holdings['Price'] = holdings.apply(lambda x: get_mark_price(x['Symbol'], x['Type']), axis=1)
+    with st.spinner("Updating live prices..."):
+        holdings["Price"] = holdings.apply(
+            lambda x: get_mark_price(x["Symbol"], x["Type"]), axis=1
+        )
 
-        # Options ×100, everything else ×1
-        holdings['Multiplier'] = holdings['Type'].apply(lambda t: 100 if t == "Option" else 1)
-        holdings['Market Value'] = holdings['Price'] * holdings['Quantity'] * holdings['Multiplier']
-        holdings['P&L ($)'] = (holdings['Price'] - holdings['Average Cost']) * holdings['Quantity'] * holdings['Multiplier']
+        holdings["Multiplier"] = holdings["Type"].apply(lambda t: 100 if t == "Option" else 1)
+        holdings["Market Value"] = holdings["Price"] * holdings["Quantity"] * holdings["Multiplier"]
+        holdings["P&L ($)"] = (holdings["Price"] - holdings["Average Cost"]) * holdings["Quantity"] * holdings["Multiplier"]
 
-        total_value = holdings['Market Value'].sum()
-        holdings['Weight (%)'] = (holdings['Market Value'] / total_value * 100) if total_value > 0 else 0
-        total_pnl = holdings['P&L ($)'].sum()
+        total_value = holdings["Market Value"].sum()
+        holdings["Weight (%)"] = (holdings["Market Value"] / total_value * 100) if total_value > 0 else 0
+        total_pnl = holdings["P&L ($)"].sum()
 
     hist_df = update_history(total_value)
 
@@ -198,19 +308,20 @@ if not holdings.empty:
     else:
         m2.metric("Day Change", "N/A (need 2+ days)")
 
-    m3.metric("Total P&L", f"${total_pnl:,.2f}",
-              delta=f"{(total_pnl / (total_value - total_pnl) * 100):.1f}%" if (total_value - total_pnl) != 0 else None)
+    m3.metric(
+        "Total P&L",
+        f"${total_pnl:,.2f}",
+        delta=f"{(total_pnl / (total_value - total_pnl) * 100):.1f}%" if (total_value - total_pnl) != 0 else None
+    )
     m4.metric("Holdings", len(holdings))
 
     st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
+    # Performance Chart
     st.subheader("Portfolio Performance")
-    timeframe = st.select_slider(
-        "Select Range",
-        options=["1W", "1M", "6M", "YTD", "1Y", "Lifetime"]
-    )
+    timeframe = st.select_slider("Select Range", options=["1W", "1M", "6M", "YTD", "1Y", "Lifetime"])
 
-    hist_df['Date'] = pd.to_datetime(hist_df['Date'])
+    hist_df["Date"] = pd.to_datetime(hist_df["Date"])
     now = datetime.now()
     if timeframe == "1W":
         start_date = now - timedelta(days=7)
@@ -223,16 +334,17 @@ if not holdings.empty:
     elif timeframe == "1Y":
         start_date = now - timedelta(days=365)
     else:
-        start_date = hist_df['Date'].min()
+        start_date = hist_df["Date"].min()
 
-    filtered_hist = hist_df[hist_df['Date'] >= start_date]
+    filtered_hist = hist_df[hist_df["Date"] >= start_date]
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=filtered_hist['Date'], y=filtered_hist['Value'],
-        mode='lines+markers',
-        line=dict(color='#00d1b2', width=3),
-        fill='tozeroy',
+        x=filtered_hist["Date"],
+        y=filtered_hist["Value"],
+        mode="lines+markers",
+        line=dict(color="#00d1b2", width=3),
+        fill="tozeroy",
         name="Total Value"
     ))
     fig.update_layout(
@@ -244,13 +356,9 @@ if not holdings.empty:
         yaxis=dict(fixedrange=True),
         dragmode=False
     )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True,
-        config={'displayModeBar': False}
-    )
-
+    # Holdings Table
     st.subheader("Current Positions")
     display_cols = [c for c in holdings.columns if c != "Multiplier"]
     st.dataframe(
@@ -259,7 +367,7 @@ if not holdings.empty:
             "Market Value": "${:,.2f}",
             "Weight (%)": "{:.1f}%",
             "P&L ($)": "${:,.2f}",
-            "Average Cost": "${:,.2f}",
+            "Average Cost": "${:,.4f}",
             "Quantity": "{:,.2f}"
         }),
         use_container_width=True,
@@ -267,4 +375,4 @@ if not holdings.empty:
     )
 
 else:
-    st.info("No holdings found. Add assets in the sidebar or upload a CSV.")
+    st.info("No holdings found. Upload a brokerage CSV or add assets manually in the sidebar.")
