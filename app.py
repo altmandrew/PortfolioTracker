@@ -110,6 +110,7 @@ def import_brokerage_csv(uploaded_file):
     content = uploaded_file.getvalue().decode("utf-8")
     lines = content.splitlines()
 
+    # Find the real header row
     header_idx = None
     for i, line in enumerate(lines):
         if "Symbol" in line and ("Qty" in line or "Quantity" in line):
@@ -117,21 +118,35 @@ def import_brokerage_csv(uploaded_file):
             break
 
     if header_idx is None:
-        raise ValueError("Could not find a header row containing 'Symbol'")
+        raise ValueError("Could not find a header row containing 'Symbol' and 'Qty/Quantity'")
 
     df = pd.read_csv(io.StringIO(content), skiprows=header_idx)
-    df.columns = [c.strip() for c in df.columns]
+    
+    # Clean column names (remove extra spaces and make lower for matching)
+    df.columns = [str(c).strip() for c in df.columns]
+    cols_lower = {c.lower(): c for c in df.columns}
 
-    symbol_col = next((c for c in df.columns if "Symbol" in c), None)
-    qty_col    = next((c for c in df.columns if "Qty" in c or "Quantity" in c), None)
-    cost_col   = next((c for c in df.columns if "Cost Basis" in c), None)
-    type_col   = next((c for c in df.columns if "Asset Type" in c or "Type" in c), None)
-    mkt_col    = next((c for c in df.columns if "Mkt Val" in c or "Market Value" in c), None)
+    def find_col(*keywords):
+        for key, original in cols_lower.items():
+            if any(kw in key for kw in keywords):
+                return original
+        return None
 
-    if not all([symbol_col, qty_col, cost_col]):
-        raise ValueError("CSV missing required columns")
+    symbol_col = find_col("symbol")
+    qty_col    = find_col("qty", "quantity")
+    cost_col   = find_col("cost basis", "cost")
+    type_col   = find_col("asset type", "type")
+    mkt_col    = find_col("mkt val", "market value", "mkt")
+
+    if not symbol_col or not qty_col or not cost_col:
+        raise ValueError(
+            f"Missing required columns.\n"
+            f"Found columns: {list(df.columns)}\n"
+            f"Symbol: {symbol_col}, Qty: {qty_col}, Cost: {cost_col}"
+        )
 
     records = []
+
     for _, row in df.iterrows():
         symbol = str(row[symbol_col]).strip()
         if not symbol or symbol.lower() in ["nan", "positions total", "--", ""]:
@@ -151,7 +166,7 @@ def import_brokerage_csv(uploaded_file):
 
         if h_type == "Cash":
             raw_val = str(row[mkt_col]) if mkt_col else "0"
-            qty = float(raw_val.replace("$", "").replace(",", "").strip() or 0)
+            qty = float(str(raw_val).replace("$", "").replace(",", "").strip() or 0)
             avg_cost = 1.0
             symbol = "CASH"
         else:
@@ -183,7 +198,8 @@ def import_brokerage_csv(uploaded_file):
         })
 
     if not records:
-        raise ValueError("No valid positions found")
+        raise ValueError("No valid positions found in the file")
+
     return pd.DataFrame(records)
 
 def merge_holdings(existing: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
