@@ -387,6 +387,106 @@ else:
     st.info("No holdings found. Upload a brokerage CSV or add assets manually.")
 
 # ============================================================
+# CURRENT PORTFOLIO ANALYSIS
+# ============================================================
+st.divider()
+st.header("🔍 Current Portfolio Analysis")
+
+if holdings.empty:
+    st.info("Add holdings to see portfolio analysis.")
+else:
+    # Calculate weights
+    total = holdings["Market Value"].sum()
+    cash_val = holdings.loc[holdings["Type"] == "Cash", "Market Value"].sum()
+    bond_val = holdings.loc[holdings["Symbol"].str.contains("BND|AGG|TLT|IEF|BNDX", case=False, na=False), "Market Value"].sum()
+    option_val = holdings.loc[holdings["Type"] == "Option", "Market Value"].sum()
+    equity_val = total - cash_val - bond_val - option_val
+
+    cash_pct = cash_val / total * 100 if total > 0 else 0
+    bond_pct = bond_val / total * 100 if total > 0 else 0
+    option_pct = option_val / total * 100 if total > 0 else 0
+    equity_pct = equity_val / total * 100 if total > 0 else 0
+
+    # Detect characteristics
+    has_leveraged_options = any(
+        (holdings["Type"] == "Option") & 
+        (holdings["Symbol"].str.contains("TQQQ|SQQQ|UPRO|SPXU|TNA|TZA", case=False, na=False))
+    )
+    has_long_calls = any(
+        (holdings["Type"] == "Option") & 
+        (holdings["Symbol"].str.contains("C", case=False, na=False))
+    )
+    high_option_concentration = option_pct > 15
+    high_bond = bond_pct > 25
+    high_cash = cash_pct > 15
+
+    # Determine overall style
+    if has_leveraged_options and option_pct > 10:
+        style = "Aggressive / High-Beta Growth"
+        best_market = "Strong Bull Market"
+        color = "green"
+        description = (
+            "This portfolio is constructed for maximum upside in a rising market. "
+            "The combination of leveraged long calls (especially TQQQ) gives it high sensitivity to tech/Nasdaq moves. "
+            "It will perform best in a sustained bull market with positive momentum."
+        )
+        risks = "High volatility and significant drawdown risk in corrections or bear markets. Leveraged options can decay or go to zero."
+    elif equity_pct > 70 and option_pct < 10 and bond_pct < 20:
+        style = "Growth-Oriented Equity"
+        best_market = "Bull Market or Mild Bull Market"
+        color = "green"
+        description = "Primarily equity-focused with limited defensive holdings. Best suited for rising markets."
+        risks = "Vulnerable to broad market pullbacks."
+    elif bond_pct > 30 or (bond_pct + cash_pct) > 40:
+        style = "Balanced / Defensive"
+        best_market = "Sideways to Mildly Bearish Markets"
+        color = "orange"
+        description = (
+            "Meaningful allocation to bonds and/or cash provides ballast. "
+            "This structure is better suited for uncertain, sideways, or moderately declining markets."
+        )
+        risks = "Will lag significantly in strong bull markets."
+    else:
+        style = "Moderately Aggressive"
+        best_market = "Bull Market with moderate volatility"
+        color = "blue"
+        description = "Mix of growth exposure and some defensive elements. Performs reasonably in rising markets while offering limited protection."
+        risks = "Still carries meaningful equity risk."
+
+    # Display results
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.metric("Portfolio Style", style)
+        st.metric("Best Suited Market", best_market)
+
+    with col2:
+        st.markdown("**Current Allocation**")
+        st.write(f"• Equity / Other: **{equity_pct:.1f}%**")
+        st.write(f"• Options: **{option_pct:.1f}%**")
+        st.write(f"• Bonds: **{bond_pct:.1f}%**")
+        st.write(f"• Cash: **{cash_pct:.1f}%**")
+
+    st.markdown("---")
+    st.markdown(f"**Analysis:** {description}")
+    st.markdown(f"**Key Risk:** {risks}")
+
+    # Extra notes based on specific holdings
+    notes = []
+    if has_leveraged_options:
+        notes.append("• Presence of leveraged ETF options (TQQQ etc.) significantly increases bullish bias and volatility.")
+    if high_option_concentration:
+        notes.append(f"• Options make up {option_pct:.1f}% of the portfolio — this is a high-conviction, high-risk stance.")
+    if high_bond:
+        notes.append(f"• Bond allocation ({bond_pct:.1f}%) provides meaningful downside cushion.")
+    if high_cash:
+        notes.append(f"• Elevated cash ({cash_pct:.1f}%) gives flexibility but creates cash drag in strong rallies.")
+
+    if notes:
+        st.markdown("**Additional Observations:**")
+        for note in notes:
+            st.markdown(note)
+# ============================================================
 # PROJECTION CALCULATOR
 # ============================================================
 st.divider()
