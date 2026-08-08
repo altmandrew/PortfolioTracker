@@ -470,11 +470,17 @@ st.header("🎯 Suggested Portfolio Changes by Market Outlook")
 outlook = st.selectbox("Select Market Outlook", ["Bullish", "Neutral", "Bearish"])
 
 has_bnd = any(holdings["Symbol"].str.contains("BND", case=False)) if not holdings.empty else False
-has_tqqq_calls = any((holdings["Type"] == "Option") & (holdings["Symbol"].str.contains("TQQQ", case=False))) if not holdings.empty else False
+has_tqqq_calls = any(
+    (holdings["Type"] == "Option") & (holdings["Symbol"].str.contains("TQQQ", case=False))
+) if not holdings.empty else False
 has_cash = any(holdings["Type"] == "Cash") if not holdings.empty else False
 cash_amount = holdings.loc[holdings["Type"] == "Cash", "Market Value"].sum() if has_cash else 0
-bond_weight = (holdings.loc[holdings["Symbol"].str.contains("BND", case=False), "Market Value"].sum() / total_value * 100) if has_bnd and total_value > 0 else 0
-option_weight = (holdings.loc[holdings["Type"] == "Option", "Market Value"].sum() / total_value * 100) if not holdings.empty and total_value > 0 else 0
+bond_weight = (
+    holdings.loc[holdings["Symbol"].str.contains("BND", case=False), "Market Value"].sum() / total_value * 100
+) if has_bnd and total_value > 0 else 0
+option_weight = (
+    holdings.loc[holdings["Type"] == "Option", "Market Value"].sum() / total_value * 100
+) if not holdings.empty and total_value > 0 else 0
 
 if outlook == "Bullish":
     st.subheader("📈 Bullish Recommendations")
@@ -510,4 +516,3 @@ else:  # Bearish
     st.subheader("📉 Bearish Recommendations")
     st.warning("Goal: Preserve capital.")
     suggestions = []
-    if has_tqqq_c
