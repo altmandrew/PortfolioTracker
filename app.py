@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
 import re
+import io
 
 st.set_page_config(layout="wide", page_title="Pro Portfolio Tracker")
 
@@ -35,7 +36,7 @@ if not check_password():
 HOLDINGS_FILE = "my_holdings.csv"
 HISTORY_FILE = "portfolio_history.csv"
 
-# --- DATA HELPERS ---
+# --- HELPERS ---
 def load_holdings():
     if os.path.exists(HOLDINGS_FILE):
         return pd.read_csv(HOLDINGS_FILE)
@@ -45,50 +46,38 @@ def save_holdings(df):
     df.to_csv(HOLDINGS_FILE, index=False)
 
 def convert_option_to_occ(symbol: str) -> str:
-    """
-    Convert human-readable option symbols to OCC format for yfinance.
-    Example: "TQQQ 01/21/2028 60.00 C" → "TQQQ260121C00060000"
-    """
+    """Convert human-readable option symbols to OCC format for yfinance."""
     symbol = symbol.strip().upper()
 
-    # Already looks like OCC?
+    # Already OCC format?
     if re.match(r"^[A-Z]{1,6}\d{6}[CP]\d{8}$", symbol):
         return symbol
 
-    # Common brokerage format: ROOT MM/DD/YYYY STRIKE C/P
     patterns = [
         r"([A-Z]+)\s+(\d{1,2})/(\d{1,2})/(\d{2,4})\s+([\d.]+)\s*([CP])",
         r"([A-Z]+)\s+(\d{1,2})-(\d{1,2})-(\d{2,4})\s+([\d.]+)\s*([CP])",
-        r"([A-Z]+)(\d{6})([CP])(\d+)",  # already partial
     ]
 
     for pat in patterns:
         match = re.search(pat, symbol)
         if match:
-            groups = match.groups()
-            if len(groups) == 6:
-                root, month, day, year, strike, cp = groups
-                year = int(year)
-                if year < 100:
-                    year += 2000
-                yy = f"{year % 100:02d}"
-                mm = f"{int(month):02d}"
-                dd = f"{int(day):02d}"
-                strike_int = int(float(strike) * 1000)
-                strike_str = f"{strike_int:08d}"
-                return f"{root}{yy}{mm}{dd}{cp}{strike_str}"
-            elif len(groups) == 4:
-                # Already close to OCC
-                return symbol
+            root, month, day, year, strike, cp = match.groups()
+            year = int(year)
+            if year < 100:
+                year += 2000
+            yy = f"{year % 100:02d}"
+            mm = f"{int(month):02d}"
+            dd = f"{int(day):02d}"
+            strike_int = int(float(strike) * 1000)
+            strike_str = f"{strike_int:08d}"
+            return f"{root}{yy}{mm}{dd}{cp}{strike_str}"
 
-    # Fallback – return original (price fetch will just fail gracefully)
-    return symbol
+    return symbol  # fallback
 
 def get_mark_price(symbol, asset_type):
     if asset_type == "Cash":
         return 1.0
     try:
-        # Convert option symbols on the fly
         if asset_type == "Option":
             symbol = convert_option_to_occ(symbol)
 
@@ -107,7 +96,6 @@ def get_mark_price(symbol, asset_type):
         return 0.0
 
 def update_history(total_val):
-    """Always keeps today's value up-to-date."""
     today = datetime.now().strftime("%Y-%m-%d")
     if os.path.exists(HISTORY_FILE):
         hist_df = pd.read_csv(HISTORY_FILE)
@@ -124,9 +112,6 @@ def update_history(total_val):
     return hist_df
 
 def import_brokerage_csv(uploaded_file):
-    """
-    Smart importer for common brokerage position CSVs + automatic OCC conversion.
-    """
     content = uploaded_file.getvalue().decode("utf-8")
     lines = content.splitlines()
 
@@ -139,7 +124,7 @@ def import_brokerage_csv(uploaded_file):
     if header_idx is None:
         raise ValueError("Could not find a header row containing 'Symbol'")
 
-    df = pd.read_csv(uploaded_file, skiprows=header_idx)
+    df = pd.read_csv(io.StringIO(content), skiprows=header_idx)
     df.columns = [c.strip() for c in df.columns]
 
     symbol_col = next((c for c in df.columns if "Symbol" in c), None)
@@ -191,7 +176,6 @@ def import_brokerage_csv(uploaded_file):
                 total_cost = 0.0
 
             if h_type == "Option":
-                # Convert symbol to OCC format
                 symbol = convert_option_to_occ(symbol)
                 avg_cost = total_cost / (qty * 100) if qty > 0 else 0
             else:
@@ -249,21 +233,30 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
                 st.rerun()
 
 with st.sidebar.expander("📂 Upload Brokerage CSV", expanded=True):
-    file = st.file_uploader("Upload CSV (Fidelity, Schwab, etc.)", type=["csv"])
-    if file:
-        try:
-            df_upload = import_brokerage_csv(file)
-            save_holdings(df_upload)
-            st.success(f"Imported {len(df_upload)} positions")
-            st.dataframe(df_upload, use_container_width=True)
-            st.rerun()
-        except Exception as e:
-            st.error(f"Import failed: {e}")
+    file = st.file_uploader(
+        "Upload CSV (Fidelity, Schwab, etc.)",
+        type=["csv"],
+        key="brokerage_uploader"
+    )
+
+    if file is not None:
+        st.write(f"Selected: **{file.name}**")
+        if st.button("🚀 Import Positions", type="primary", use_container_width=True):
+            try:
+                df_upload = import_brokerage_csv(file)
+                save_holdings(df_upload)
+                st.success(f"Successfully imported {len(df_upload)} positions!")
+                st.dataframe(df_upload, use_container_width=True)
+                st.balloons()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Import failed: {e}")
+                st.exception(e)
 
 holdings_preview = load_holdings()
 if not holdings_preview.empty:
     with st.sidebar.expander("🗑️ Delete Holding"):
-        to_delete = st.selectbox("Select symbol", holdings_preview["Symbol"].tolist())
+        to_delete = st.selectbox("Select symbol to delete", holdings_preview["Symbol"].tolist())
         if st.button("Delete selected", type="primary"):
             holdings_preview = holdings_preview[holdings_preview["Symbol"] != to_delete]
             save_holdings(holdings_preview)
@@ -317,7 +310,7 @@ if not holdings.empty:
 
     st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-    # Performance Chart
+    # Chart
     st.subheader("Portfolio Performance")
     timeframe = st.select_slider("Select Range", options=["1W", "1M", "6M", "YTD", "1Y", "Lifetime"])
 
@@ -358,7 +351,7 @@ if not holdings.empty:
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-    # Holdings Table
+    # Table
     st.subheader("Current Positions")
     display_cols = [c for c in holdings.columns if c != "Multiplier"]
     st.dataframe(
