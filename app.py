@@ -10,26 +10,39 @@ import numpy as np
 
 st.set_page_config(layout="wide", page_title="Portfolio Pulse")
 
-# -------------------- SIMPLE PASSWORD LOGIN --------------------
-def check_password():
-    def password_entered():
-        if st.session_state["password"] == st.secrets["password"]:
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]
-        else:
-            st.session_state["password_correct"] = False
-
-    if "password_correct" not in st.session_state:
-        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
-        return False
-    elif not st.session_state["password_correct"]:
-        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
-        st.error("😕 Password incorrect")
-        return False
-    else:
+# -------------------- MULTI-USER EMAIL + PASSWORD LOGIN --------------------
+def check_login():
+    if st.session_state.get("authenticated"):
         return True
 
-if not check_password():
+    st.title("🔒 Portfolio Pulse – Login")
+    st.write("Please enter your email and password.")
+
+    with st.form("Login"):
+        email = st.text_input("Email").strip().lower()
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Log in")
+
+        if submitted:
+            try:
+                accounts = st.secrets["accounts"]
+                accounts_lower = {str(k).lower(): str(v) for k, v in accounts.items()}
+
+                if email in accounts_lower and password == accounts_lower[email]:
+                    st.session_state["authenticated"] = True
+                    st.session_state["user_email"] = email
+                    st.success("Login successful!")
+                    st.rerun()
+                else:
+                    st.error("Invalid email or password")
+            except Exception as e:
+                st.error("Secrets error – please check your [accounts] section")
+                st.exception(e)          # ← this will show the exact problem
+
+    return False
+
+
+if not check_login():
     st.stop()
 # -------------------- END LOGIN --------------------
 
