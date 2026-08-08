@@ -461,3 +461,94 @@ fig_proj.update_layout(
 st.plotly_chart(fig_proj, use_container_width=True, config={"displayModeBar": False})
 
 st.caption("Assumption: Contributions are made at the end of each year. Returns are compounded annually.")
+
+# ============================================================
+# PORTFOLIO OUTLOOK SUGGESTIONS
+# ============================================================
+st.divider()
+st.header("🎯 Suggested Portfolio Changes by Market Outlook")
+
+outlook = st.selectbox(
+    "Select Market Outlook",
+    options=["Bullish", "Neutral", "Bearish"],
+    index=0
+)
+
+# Analyze current holdings
+has_bnd = any(holdings["Symbol"].str.contains("BND", case=False)) if not holdings.empty else False
+has_tqqq_calls = any((holdings["Type"] == "Option") & (holdings["Symbol"].str.contains("TQQQ", case=False))) if not holdings.empty else False
+has_cash = any(holdings["Type"] == "Cash") if not holdings.empty else False
+cash_amount = holdings.loc[holdings["Type"] == "Cash", "Market Value"].sum() if has_cash else 0
+total_value = holdings["Market Value"].sum() if not holdings.empty else 0
+bond_weight = (holdings.loc[holdings["Symbol"].str.contains("BND", case=False), "Market Value"].sum() / total_value * 100) if has_bnd and total_value > 0 else 0
+option_weight = (holdings.loc[holdings["Type"] == "Option", "Market Value"].sum() / total_value * 100) if not holdings.empty and total_value > 0 else 0
+
+if outlook == "Bullish":
+    st.subheader("📈 Bullish Outlook Recommendations")
+    st.success("Goal: Maximize upside participation while keeping some risk controls.")
+
+    suggestions = []
+
+    if has_cash and cash_amount > 1000:
+        suggestions.append(f"**Deploy Cash**: You currently have ~${cash_amount:,.0f} in cash. Consider putting a large portion into growth-oriented positions (e.g. QQQ, TQQQ, or high-conviction individual stocks).")
+
+    if has_bnd and bond_weight > 15:
+        suggestions.append(f"**Reduce Bond Exposure**: BND is currently ~{bond_weight:.1f}% of the portfolio. In a strong bull market, consider trimming BND and rotating into equities or leveraged ETFs.")
+
+    if has_tqqq_calls:
+        suggestions.append("**Keep / Add to TQQQ Calls**: Your long-dated TQQQ calls are well-positioned for a bullish move. Consider adding more contracts on dips or rolling to higher strikes if the move is strong.")
+
+    if not has_tqqq_calls:
+        suggestions.append("**Add Leveraged Upside**: Consider initiating or adding long-dated TQQQ or QQQ call options to increase bullish convexity.")
+
+    suggestions.append("**Increase Equity Beta**: Favor growth/tech heavy positions over defensive ones.")
+    suggestions.append("**Avoid new protective puts** unless used for very short-term hedges.")
+
+    for i, s in enumerate(suggestions, 1):
+        st.markdown(f"{i}. {s}")
+
+elif outlook == "Neutral":
+    st.subheader("⚖️ Neutral Outlook Recommendations")
+    st.info("Goal: Maintain balance, harvest gains where appropriate, and stay flexible.")
+
+    suggestions = []
+
+    if option_weight > 20:
+        suggestions.append(f"**Trim Some Options**: Options currently make up ~{option_weight:.1f}% of the portfolio. Consider taking partial profits on TQQQ calls to reduce volatility.")
+
+    if has_cash and cash_amount < total_value * 0.05:
+        suggestions.append("**Build a small cash buffer**: Aim for 5–10% cash so you can buy dips without selling core holdings.")
+
+    if has_bnd:
+        suggestions.append("**Keep core bond allocation**: BND provides ballast. Maintain or slightly increase it for stability.")
+
+    suggestions.append("**Rebalance if needed**: Bring any single position that has grown >25–30% of the portfolio back toward target weight.")
+    suggestions.append("**Prefer defined-risk strategies**: Use spreads instead of naked long calls if adding new option exposure.")
+    suggestions.append("**Stay patient**: Avoid chasing extended moves. Wait for better entry points.")
+
+    for i, s in enumerate(suggestions, 1):
+        st.markdown(f"{i}. {s}")
+
+elif outlook == "Bearish":
+    st.subheader("📉 Bearish Outlook Recommendations")
+    st.warning("Goal: Preserve capital and reduce downside risk.")
+
+    suggestions = []
+
+    if has_tqqq_calls:
+        suggestions.append("**Reduce or exit TQQQ Calls**: Leveraged long calls can lose significant value quickly in a sell-off. Strongly consider closing or heavily trimming these positions.")
+
+    if has_cash and cash_amount < total_value * 0.15:
+        suggestions.append(f"**Increase Cash**: Raise cash to at least 15–25% of the portfolio (currently ~${cash_amount:,.0f}).")
+
+    if has_bnd and bond_weight < 25:
+        suggestions.append(f"**Increase Bond Allocation**: BND is a defensive holding. Consider adding more (current weight ~{bond_weight:.1f}%).")
+
+    suggestions.append("**Reduce overall equity exposure**: Trim high-beta stocks and growth positions.")
+    suggestions.append("**Consider protective puts** on major indices (QQQ or SPY) if you want to keep some equity exposure.")
+    suggestions.append("**Avoid new leveraged long positions** until the trend clearly turns.")
+
+    for i, s in enumerate(suggestions, 1):
+        st.markdown(f"{i}. {s}")
+
+st.caption("These are general suggestions based on your current holdings and the selected outlook. They are not personalized financial advice.")
