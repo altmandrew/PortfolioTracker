@@ -516,6 +516,23 @@ else:  # Bearish
     st.subheader("📉 Bearish Recommendations")
     st.warning("Goal: Preserve capital.")
     suggestions = []
+    if has_tqqq_calls:
+        suggestions.append("**Reduce or exit TQQQ Calls**: Leveraged long calls can lose significant value quickly in a sell-off. Strongly consider closing or heavily trimming these positions.")
+
+    if has_cash and cash_amount < total_value * 0.15:
+        suggestions.append(f"**Increase Cash**: Raise cash to at least 15–25% of the portfolio (currently ~${cash_amount:,.0f}).")
+
+    if has_bnd and bond_weight < 25:
+        suggestions.append(f"**Increase Bond Allocation**: BND is a defensive holding. Consider adding more (current weight ~{bond_weight:.1f}%).")
+
+    suggestions.append("**Reduce overall equity exposure**: Trim high-beta stocks and growth positions.")
+    suggestions.append("**Consider protective puts** on major indices (QQQ or SPY) if you want to keep some equity exposure.")
+    suggestions.append("**Avoid new leveraged long positions** until the trend clearly turns.")
+
+    for i, s in enumerate(suggestions, 1):
+        st.markdown(f"{i}. {s}")
+
+st.caption("These are general suggestions based on your current holdings and the selected outlook. They are not personalized financial advice.")
 
 # ============================================================
 # PROJECTION CALCULATOR
