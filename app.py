@@ -7,10 +7,6 @@ import os
 import re
 import io
 import numpy as np
-import gspread
-from gspread_dataframe import get_as_dataframe, set_with_dataframe
-from google.oauth2.service_account import Credentials
-from datetime import datetime
 
 st.set_page_config(layout="wide", page_title="Portfolio Pulse")
 
@@ -56,99 +52,27 @@ with st.sidebar:
                 del st.session_state[key]
         st.rerun()
 # -------------------- END LOGIN --------------------
-# --- GOOGLE SHEETS SETUP ---
-# Define the required Google API scopes
-SCOPES = [
-    'https://www.googleapis.com/auth/spreadsheets',
-    'https://www.googleapis.com/auth/drive'
-]
 
-# Paste the Spreadsheet ID found in your Google Sheet URL 
-# (e.g., https://docs.google.com/spreadsheets/d/THIS_IS_THE_ID/edit)
-SPREADSHEET_ID = "15v7tF2Y3hBuhp8cBqtHx02CyUibY8KZzYBMNfKokhfg"
 
-def get_gsheets_client():
-    # Pull credentials directly from Streamlit's secure secrets manager
-    creds_dict = dict(st.secrets["google_service_account"])
-    
-    # Force literal '\n' strings to become actual line breaks
-    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-    
-    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-    return gspread.authorize(creds)
-
-# --- USER-SPECIFIC SHEETS ---
-def get_user_worksheets():
-    client = get_gsheets_client()
-    sheet = client.open_by_key(SPREADSHEET_ID)
-    
+# --- USER-SPECIFIC FILES ---
+def get_user_files():
     email = st.session_state.get("user_email", "anonymous")
     safe_name = email.replace("@", "_at_").replace(".", "_").replace("+", "_")
-    holdings_sheet_name = f"holdings_{safe_name}"
-    history_sheet_name = f"history_{safe_name}"
-    
-    # Get or create the holdings tab for the user
-    try:
-        holdings_ws = sheet.worksheet(holdings_sheet_name)
-    except gspread.exceptions.WorksheetNotFound:
-        holdings_ws = sheet.add_worksheet(title=holdings_sheet_name, rows="1000", cols="20")
-        
-    # Get or create the history tab for the user
-    try:
-        history_ws = sheet.worksheet(history_sheet_name)
-    except gspread.exceptions.WorksheetNotFound:
-        history_ws = sheet.add_worksheet(title=history_sheet_name, rows="1000", cols="20")
-        
-    return holdings_ws, history_ws
+    holdings_file = f"holdings_{safe_name}.csv"
+    history_file = f"history_{safe_name}.csv"
+    return holdings_file, history_file
 
 
-# --- REFACTORED HELPERS ---
+# --- HELPERS ---
 def load_holdings():
-    holdings_ws, _ = get_user_worksheets()
-    
-    # Read the data from the Google Sheet into a DataFrame
-    df = get_as_dataframe(holdings_ws, evaluate_formulas=True)
-    
-    # Drop empty rows and columns that gspread_dataframe often pulls in
-    df = df.dropna(how='all').dropna(axis=1, how='all')
-    
-    if df.empty or "Symbol" not in df.columns:
-        return pd.DataFrame(columns=["Symbol", "Type", "Quantity", "Average Cost"])
-    
-    return df
+    holdings_file, _ = get_user_files()
+    if os.path.exists(holdings_file):
+        return pd.read_csv(holdings_file)
+    return pd.DataFrame(columns=["Symbol", "Type", "Quantity", "Average Cost"])
 
 def save_holdings(df):
-    holdings_ws, _ = get_user_worksheets()
-    
-    # Clear the existing sheet data to avoid overlapping stale data
-    holdings_ws.clear()
-    
-    # Write the updated DataFrame back to Google Sheets
-    set_with_dataframe(holdings_ws, df)
-
-def update_history(total_val):
-    _, history_ws = get_user_worksheets()
-    today = datetime.now().strftime("%Y-%m-%d")
-    
-    # Read existing history
-    df = get_as_dataframe(history_ws, evaluate_formulas=True)
-    df = df.dropna(how='all').dropna(axis=1, how='all')
-    
-    if df.empty or "Date" not in df.columns:
-        df = pd.DataFrame(columns=["Date", "Value"])
-        
-    # Update today's value if it exists, otherwise append a new row
-    if today in df["Date"].values:
-        df.loc[df["Date"] == today, "Value"] = total_val
-    else:
-        new_entry = pd.DataFrame([{"Date": today, "Value": total_val}])
-        df = pd.concat([df, new_entry], ignore_index=True)
-        
-    # Save back to Google Sheets
-    history_ws.clear()
-    set_with_dataframe(history_ws, df)
-    
-    return df
+    holdings_file, _ = get_user_files()
+    df.to_csv(holdings_file, index=False)
 
 def convert_option_to_occ(symbol: str) -> str:
     symbol = symbol.strip().upper()
@@ -193,6 +117,24 @@ def get_mark_price(symbol, asset_type):
             return float(ticker.fast_info.last_price)
     except Exception:
         return 0.0
+
+def update_history(total_val):
+    _, history_file = get_user_files()
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    if os.path.exists(history_file):
+        hist_df = pd.read_csv(history_file)
+    else:
+        hist_df = pd.DataFrame(columns=["Date", "Value"])
+
+    if today in hist_df["Date"].values:
+        hist_df.loc[hist_df["Date"] == today, "Value"] = total_val
+    else:
+        new_entry = pd.DataFrame([{"Date": today, "Value": total_val}])
+        hist_df = pd.concat([hist_df, new_entry], ignore_index=True)
+
+    hist_df.to_csv(history_file, index=False)
+    return hist_df
 
 def import_brokerage_csv(uploaded_file):
     content = uploaded_file.getvalue().decode("utf-8")
@@ -643,3 +585,4 @@ fig_proj.update_layout(
 )
 st.plotly_chart(fig_proj, use_container_width=True, config={"displayModeBar": False})
 st.caption("Assumption: Contributions at end of each year. Returns compounded annually.")
+                    
