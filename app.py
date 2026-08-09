@@ -534,4 +534,5 @@ else:
 st.divider()
 st.header("🎯 Suggested Portfolio Changes by Market Outlook")
 
-outlook = st.selectbox("Select Market Outlook"
+outlook = st.selectbox("Select Market Outlook", ["Bullish", "Neutral", "Bearish"])
+
