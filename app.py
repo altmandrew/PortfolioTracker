@@ -68,12 +68,11 @@ SCOPES = [
 SPREADSHEET_ID = "15v7tF2Y3hBuhp8cBqtHx02CyUibY8KZzYBMNfKokhfg"
 
 def get_gsheets_client():
-    # If deploying on Streamlit Community Cloud, map your JSON key into st.secrets
-    # creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=SCOPES)
-    
-    # For local testing using the downloaded JSON file:
-    creds = Credentials.from_service_account_file("service_account.json", scopes=SCOPES)
+    # Pull credentials directly from Streamlit's secure secrets manager
+    creds_dict = dict(st.secrets["google_service_account"])
+    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     return gspread.authorize(creds)
+
 
 # --- USER-SPECIFIC SHEETS ---
 def get_user_worksheets():
