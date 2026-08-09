@@ -2,3 +2,5 @@ streamlit>=1.42.0
 pandas
 yfinance
 plotly
+gspread
+google-auth
