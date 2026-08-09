@@ -516,3 +516,55 @@ else:  # Bearish
     st.subheader("📉 Bearish Recommendations")
     st.warning("Goal: Preserve capital.")
     suggestions = []
+
+# ============================================================
+# PROJECTION CALCULATOR
+# ============================================================
+st.divider()
+st.header("🔮 Portfolio Projection Calculator")
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    annual_contribution = st.slider("Annual Contribution ($)", 0, 100000, 10000, 1000)
+with col2:
+    expected_return = st.slider("Expected Annual Return (%)", 0.0, 20.0, 8.0, 0.5)
+with col3:
+    years = st.slider("Time Horizon (Years)", 1, 50, 20)
+
+start_value = total_value if total_value > 0 else 0
+r = expected_return / 100
+years_list = list(range(0, years + 1))
+values = []
+
+for y in years_list:
+    if r == 0:
+        fv = start_value + annual_contribution * y
+    else:
+        fv = start_value * (1 + r)**y + annual_contribution * (((1 + r)**y - 1) / r)
+    values.append(fv)
+
+final_value = values[-1]
+total_contributed = annual_contribution * years
+growth = final_value - start_value - total_contributed
+
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Starting Value", f"${start_value:,.0f}")
+m2.metric("Total Contributions", f"${total_contributed:,.0f}")
+m3.metric("Investment Growth", f"${growth:,.0f}")
+m4.metric(f"Value in {years} Years", f"${final_value:,.0f}")
+
+fig_proj = go.Figure()
+fig_proj.add_trace(go.Scatter(
+    x=years_list, y=values,
+    mode="lines+markers", line=dict(color="#00d1b2", width=3),
+    fill="tozeroy", name="Projected Value"
+))
+fig_proj.update_layout(
+    template="plotly_dark", height=400,
+    margin=dict(l=0, r=0, t=30, b=0),
+    xaxis_title="Years from Now", yaxis_title="Portfolio Value ($)",
+    title=f"Projected Growth at {expected_return}% annual return",
+    xaxis=dict(fixedrange=True), yaxis=dict(fixedrange=True), dragmode=False
+)
+st.plotly_chart(fig_proj, use_container_width=True, config={"displayModeBar": False})
+st.caption("Assumption: Contributions at end of each year. Returns compounded annually.")
