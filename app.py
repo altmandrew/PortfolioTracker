@@ -513,4 +513,4 @@ elif outlook == "Neutral":
         st.markdown(f"{i}. {s}")
 
 else:  # Bearish
-    st.subheader("📉 Bear
+    st.subheader("📉 Bearish")
