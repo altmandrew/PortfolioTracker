@@ -8,6 +8,10 @@ import re
 import io
 import numpy as np
 
+# --- GOOGLE SHEETS IMPORTS ---
+import gspread
+from google.oauth2.service_account import Credentials
+
 st.set_page_config(layout="wide", page_title="Portfolio Pulse")
 
 # -------------------- MULTI-USER EMAIL + PASSWORD LOGIN --------------------
@@ -40,7 +44,6 @@ def check_login():
 
     return False
 
-
 if not check_login():
     st.stop()
 
@@ -53,26 +56,83 @@ with st.sidebar:
         st.rerun()
 # -------------------- END LOGIN --------------------
 
+# -------------------- GOOGLE SHEETS SETUP --------------------
+@st.cache_resource
+def get_gspread_client():
+    scope = [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive'
+    ]
+    # st.secrets returns an AttrDict; converting to standard dict for the credentials loader
+    creds_dict = dict(st.secrets["google_service_account"])
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    return gspread.authorize(creds)
 
-# --- USER-SPECIFIC FILES ---
-def get_user_files():
+try:
+    gc = get_gspread_client()
+    SPREADSHEET_ID = st.secrets["google_sheets"]["spreadsheet_id"]
+    sh = gc.open_by_key(SPREADSHEET_ID)
+except Exception as e:
+    st.error("Could not connect to Google Sheets. Have you shared the sheet with the service account email?")
+    st.exception(e)
+    st.stop()
+
+
+# --- USER-SPECIFIC SHEETS ---
+def get_user_sheet_names():
     email = st.session_state.get("user_email", "anonymous")
     safe_name = email.replace("@", "_at_").replace(".", "_").replace("+", "_")
-    holdings_file = f"holdings_{safe_name}.csv"
-    history_file = f"history_{safe_name}.csv"
-    return holdings_file, history_file
+    holdings_sheet = f"holdings_{safe_name}"
+    history_sheet = f"history_{safe_name}"
+    return holdings_sheet, history_sheet
+
+def get_or_create_worksheet(sheet_name, headers):
+    """Fetches a worksheet by name, creating it if it doesn't exist."""
+    try:
+        ws = sh.worksheet(sheet_name)
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet(title=sheet_name, rows="1000", cols="20")
+        try:
+            ws.update(values=[headers], range_name="A1:Z1")
+        except TypeError:
+            ws.update([headers]) # Fallback for older gspread versions
+    return ws
+
+def df_to_sheet_values(df):
+    """Safely converts a DataFrame to a list of lists for gspread."""
+    df_clean = df.fillna("")
+    return [df_clean.columns.values.tolist()] + df_clean.values.tolist()
+
+def write_to_worksheet(ws, df):
+    """Clears the worksheet and writes the new dataframe."""
+    ws.clear()
+    data = df_to_sheet_values(df)
+    try:
+        ws.update(values=data, range_name="A1")
+    except TypeError:
+        ws.update(data) # Fallback for older gspread versions
 
 
 # --- HELPERS ---
 def load_holdings():
-    holdings_file, _ = get_user_files()
-    if os.path.exists(holdings_file):
-        return pd.read_csv(holdings_file)
-    return pd.DataFrame(columns=["Symbol", "Type", "Quantity", "Average Cost"])
+    holdings_sheet_name, _ = get_user_sheet_names()
+    headers = ["Symbol", "Type", "Quantity", "Average Cost"]
+    ws = get_or_create_worksheet(holdings_sheet_name, headers)
+    
+    data = ws.get_all_records()
+    if not data:
+        return pd.DataFrame(columns=headers)
+    
+    df = pd.DataFrame(data)
+    # Enforce correct types
+    df['Quantity'] = pd.to_numeric(df['Quantity'], errors='coerce').fillna(0.0)
+    df['Average Cost'] = pd.to_numeric(df['Average Cost'], errors='coerce').fillna(0.0)
+    return df
 
 def save_holdings(df):
-    holdings_file, _ = get_user_files()
-    df.to_csv(holdings_file, index=False)
+    holdings_sheet_name, _ = get_user_sheet_names()
+    ws = get_or_create_worksheet(holdings_sheet_name, ["Symbol", "Type", "Quantity", "Average Cost"])
+    write_to_worksheet(ws, df)
 
 def convert_option_to_occ(symbol: str) -> str:
     symbol = symbol.strip().upper()
@@ -119,13 +179,17 @@ def get_mark_price(symbol, asset_type):
         return 0.0
 
 def update_history(total_val):
-    _, history_file = get_user_files()
+    _, history_sheet_name = get_user_sheet_names()
+    headers = ["Date", "Value"]
+    ws = get_or_create_worksheet(history_sheet_name, headers)
+    
+    data = ws.get_all_records()
     today = datetime.now().strftime("%Y-%m-%d")
 
-    if os.path.exists(history_file):
-        hist_df = pd.read_csv(history_file)
+    if not data:
+        hist_df = pd.DataFrame(columns=headers)
     else:
-        hist_df = pd.DataFrame(columns=["Date", "Value"])
+        hist_df = pd.DataFrame(data)
 
     if today in hist_df["Date"].values:
         hist_df.loc[hist_df["Date"] == today, "Value"] = total_val
@@ -133,7 +197,7 @@ def update_history(total_val):
         new_entry = pd.DataFrame([{"Date": today, "Value": total_val}])
         hist_df = pd.concat([hist_df, new_entry], ignore_index=True)
 
-    hist_df.to_csv(history_file, index=False)
+    write_to_worksheet(ws, hist_df)
     return hist_df
 
 def import_brokerage_csv(uploaded_file):
@@ -307,10 +371,13 @@ if not holdings_preview.empty:
             st.rerun()
 
 if st.sidebar.button("🗑️ Reset My Data", type="secondary"):
-    holdings_file, history_file = get_user_files()
-    for f in [holdings_file, history_file]:
-        if os.path.exists(f):
-            os.remove(f)
+    h_sheet, hist_sheet = get_user_sheet_names()
+    for s_name in [h_sheet, hist_sheet]:
+        try:
+            ws_to_delete = sh.worksheet(s_name)
+            sh.del_worksheet(ws_to_delete)
+        except gspread.WorksheetNotFound:
+            pass
     st.rerun()
 
 
@@ -467,52 +534,4 @@ else:
 st.divider()
 st.header("🎯 Suggested Portfolio Changes by Market Outlook")
 
-outlook = st.selectbox("Select Market Outlook", ["Bullish", "Neutral", "Bearish"])
-
-has_bnd = any(holdings["Symbol"].str.contains("BND", case=False)) if not holdings.empty else False
-has_tqqq_calls = any(
-    (holdings["Type"] == "Option") & (holdings["Symbol"].str.contains("TQQQ", case=False))
-) if not holdings.empty else False
-has_cash = any(holdings["Type"] == "Cash") if not holdings.empty else False
-cash_amount = holdings.loc[holdings["Type"] == "Cash", "Market Value"].sum() if has_cash else 0
-bond_weight = (
-    holdings.loc[holdings["Symbol"].str.contains("BND", case=False), "Market Value"].sum() / total_value * 100
-) if has_bnd and total_value > 0 else 0
-option_weight = (
-    holdings.loc[holdings["Type"] == "Option", "Market Value"].sum() / total_value * 100
-) if not holdings.empty and total_value > 0 else 0
-
-if outlook == "Bullish":
-    st.subheader("📈 Bullish Recommendations")
-    st.success("Goal: Maximize upside participation.")
-    suggestions = []
-    if has_cash and cash_amount > 1000:
-        suggestions.append(f"**Deploy Cash**: You have ~${cash_amount:,.0f} in cash. Consider deploying into growth positions.")
-    if has_bnd and bond_weight > 15:
-        suggestions.append(f"**Reduce Bonds**: BND is ~{bond_weight:.1f}% of the portfolio. Consider rotating into equities.")
-    if has_tqqq_calls:
-        suggestions.append("**Keep / Add to TQQQ Calls**: Your long-dated calls are well positioned for upside.")
-    else:
-        suggestions.append("**Add Leveraged Upside**: Consider long-dated TQQQ or QQQ calls.")
-    suggestions.append("**Increase Equity Beta** and avoid new protective puts.")
-    for i, s in enumerate(suggestions, 1):
-        st.markdown(f"{i}. {s}")
-
-elif outlook == "Neutral":
-    st.subheader("⚖️ Neutral Recommendations")
-    st.info("Goal: Maintain balance and stay flexible.")
-    suggestions = []
-    if option_weight > 20:
-        suggestions.append(f"**Trim Options**: Options are ~{option_weight:.1f}% of the portfolio. Consider taking partial profits.")
-    if has_cash and cash_amount < total_value * 0.05:
-        suggestions.append("**Build a small cash buffer** (aim for 5–10%).")
-    if has_bnd:
-        suggestions.append("**Keep core bond allocation** for stability.")
-    suggestions.append("**Rebalance** any position that has grown too large.")
-    for i, s in enumerate(suggestions, 1):
-        st.markdown(f"{i}. {s}")
-
-else:  # Bearish
-    st.subheader("📉 Bearish Recommendations")
-    st.warning("Goal: Preserve capital.")
-    suggestions = []
+outlook = st.selectbox("Select Market Outlook"
