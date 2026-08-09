@@ -70,9 +70,12 @@ SPREADSHEET_ID = "15v7tF2Y3hBuhp8cBqtHx02CyUibY8KZzYBMNfKokhfg"
 def get_gsheets_client():
     # Pull credentials directly from Streamlit's secure secrets manager
     creds_dict = dict(st.secrets["google_service_account"])
+    
+    # Force literal '\n' strings to become actual line breaks
+    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+    
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     return gspread.authorize(creds)
-
 
 # --- USER-SPECIFIC SHEETS ---
 def get_user_worksheets():
