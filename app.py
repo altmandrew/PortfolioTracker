@@ -513,4 +513,6 @@ elif outlook == "Neutral":
         st.markdown(f"{i}. {s}")
 
 else:  # Bearish
-    st.subheader("📉 Bearish")
+    st.subheader("📉 Bearish Recommendations")
+    st.warning("Goal: Preserve capital.")
+    suggestions = []
