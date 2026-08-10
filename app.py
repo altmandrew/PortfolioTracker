@@ -473,6 +473,29 @@ st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 # Analysis + Outlook + Projection sections remain the same as before
 # (You can keep the ones you already have or ask me to include them again)
+# ------------------ HOLDINGS TABLE ------------------
+st.subheader("Current Positions")
+
+if not holdings.empty:
+    display_df = holdings[[
+        "Symbol", "Type", "Quantity", "Average Cost",
+        "Price", "Market Value", "Weight (%)", "P&L ($)"
+    ]].copy()
+
+    st.dataframe(
+        display_df.style.format({
+            "Quantity": "{:,.2f}",
+            "Average Cost": "${:,.4f}",
+            "Price": "${:,.2f}",
+            "Market Value": "${:,.2f}",
+            "Weight (%)": "{:.1f}%",
+            "P&L ($)": "${:,.2f}"
+        }),
+        use_container_width=True,
+        hide_index=True
+    )
+else:
+    st.info("No holdings to display.")
 
 # ============================================================
 # CNN FEAR & GREED INDEX (Last 30 Days)
