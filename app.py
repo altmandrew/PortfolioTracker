@@ -411,39 +411,64 @@ if not holdings.empty:
 
     st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Data stored in Google Sheets")
 
-    # History chart
-    st.subheader("Portfolio Performance")
-    timeframe = st.select_slider("Range", ["1W", "1M", "6M", "YTD", "1Y", "Lifetime"])
-    hist_df["Date"] = pd.to_datetime(hist_df["Date"])
-    now = datetime.now()
-    if timeframe == "1W":
-        start = now - timedelta(days=7)
-    elif timeframe == "1M":
-        start = now - timedelta(days=30)
-    elif timeframe == "6M":
-        start = now - timedelta(days=180)
-    elif timeframe == "YTD":
-        start = datetime(now.year, 1, 1)
-    elif timeframe == "1Y":
-        start = now - timedelta(days=365)
-    else:
-        start = hist_df["Date"].min()
-    filtered = hist_df[hist_df["Date"] >= start]
+    # Historical Performance Chart
+st.subheader("Portfolio Performance")
 
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=filtered["Date"], y=filtered["Value"], mode="lines+markers",
-                             line=dict(color="#00d1b2", width=3), fill="tozeroy"))
-    fig.update_layout(template="plotly_dark", height=350, margin=dict(l=0,r=0,t=20,b=0),
-                      xaxis=dict(fixedrange=True), yaxis=dict(fixedrange=True), dragmode=False)
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+# Initialize selected timeframe in session state
+if "hist_timeframe" not in st.session_state:
+    st.session_state.hist_timeframe = "1M"
 
-    st.subheader("Current Positions")
-    st.dataframe(holdings[["Symbol", "Type", "Quantity", "Average Cost", "Price", "Market Value", "Weight (%)", "P&L ($)"]].style.format({
-        "Price": "${:,.2f}", "Market Value": "${:,.2f}", "Weight (%)": "{:.1f}%",
-        "P&L ($)": "${:,.2f}", "Average Cost": "${:,.4f}", "Quantity": "{:,.2f}"
-    }), use_container_width=True, hide_index=True)
-else:
-    st.info("No holdings yet. Upload a CSV or add assets manually.")
+# Button row
+cols = st.columns(6)
+timeframes = ["1W", "1M", "6M", "YTD", "1Y", "Lifetime"]
+
+for i, tf in enumerate(timeframes):
+    if cols[i].button(tf, key=f"tf_{tf}", use_container_width=True,
+                      type="primary" if st.session_state.hist_timeframe == tf else "secondary"):
+        st.session_state.hist_timeframe = tf
+        st.rerun()
+
+timeframe = st.session_state.hist_timeframe
+
+# Filter data based on selected timeframe
+hist_df["Date"] = pd.to_datetime(hist_df["Date"])
+now = datetime.now()
+
+if timeframe == "1W":
+    start_date = now - timedelta(days=7)
+elif timeframe == "1M":
+    start_date = now - timedelta(days=30)
+elif timeframe == "6M":
+    start_date = now - timedelta(days=180)
+elif timeframe == "YTD":
+    start_date = datetime(now.year, 1, 1)
+elif timeframe == "1Y":
+    start_date = now - timedelta(days=365)
+else:  # Lifetime
+    start_date = hist_df["Date"].min()
+
+filtered_hist = hist_df[hist_df["Date"] >= start_date]
+
+# Chart
+fig = go.Figure()
+fig.add_trace(go.Scatter(
+    x=filtered_hist["Date"],
+    y=filtered_hist["Value"],
+    mode="lines+markers",
+    line=dict(color="#00d1b2", width=3),
+    fill="tozeroy",
+    name="Total Value"
+))
+fig.update_layout(
+    template="plotly_dark",
+    height=350,
+    margin=dict(l=0, r=0, t=20, b=0),
+    yaxis_title="Portfolio Value ($)",
+    xaxis=dict(fixedrange=True),
+    yaxis=dict(fixedrange=True),
+    dragmode=False
+)
+st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
 # Analysis + Outlook + Projection sections remain the same as before
