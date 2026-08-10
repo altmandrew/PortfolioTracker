@@ -5,3 +5,4 @@ plotly
 gspread
 gspread-dataframe
 google-auth
+fear-greed
