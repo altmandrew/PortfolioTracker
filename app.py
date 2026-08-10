@@ -450,34 +450,78 @@ else:
 # (You can keep the ones you already have or ask me to include them again)
 
 # ============================================================
-# FEAR & GREED INDEX (Last 30 Days)
+# CNN FEAR & GREED INDEX (Last 30 Days)
 # ============================================================
 st.divider()
-st.subheader("😱 Fear & Greed Index – Last 30 Days")
+st.subheader("😱 CNN Fear & Greed Index – Last 30 Days")
 
 @st.cache_data(ttl=3600)
-def get_fear_greed_30d():
+def get_cnn_fear_greed_30d():
     try:
-        url = "https://api.alternative.me/fng/?limit=30&format=json"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json()["data"]
-
-        df = pd.DataFrame(data)
-
-        # Clean and convert timestamp properly
-        df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-        df["date"] = pd.to_datetime(df["timestamp"], unit="s", errors="coerce")
-
-        # Remove any bad rows
-        df = df.dropna(subset=["date", "value"])
+        import fear_greed
+        history = fear_greed.get_history(last="30")   # last 30 days
+        
+        df = pd.DataFrame(history)
+        df["date"] = pd.to_datetime(df["date"])
         df = df.sort_values("date").reset_index(drop=True)
-
         return df
     except Exception as e:
-        st.warning(f"Could not load Fear & Greed data: {e}")
+        st.warning(f"Could not load CNN Fear & Greed data: {e}")
         return pd.DataFrame()
+
+fg_df = get_cnn_fear_greed_30d()
+
+if not fg_df.empty:
+    current_value = fg_df.iloc[-1]["score"]
+    current_label = fg_df.iloc[-1].get("rating", "").title()
+
+    # Color coding
+    if current_value <= 25:
+        color = "#e74c3c"
+    elif current_value <= 45:
+        color = "#e67e22"
+    elif current_value <= 55:
+        color = "#f1c40f"
+    elif current_value <= 75:
+        color = "#2ecc71"
+    else:
+        color = "#27ae60"
+
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        st.metric("Current CNN Fear & Greed", f"{current_value:.0f}", delta=current_label)
+
+    with col2:
+        fig_fg = go.Figure()
+        fig_fg.add_trace(go.Scatter(
+            x=fg_df["date"],
+            y=fg_df["score"],
+            mode="lines+markers",
+            line=dict(color=color, width=3),
+            fill="tozeroy",
+            name="CNN Fear & Greed"
+        ))
+
+        # Reference lines
+        fig_fg.add_hline(y=25, line_dash="dot", line_color="red", annotation_text="Extreme Fear")
+        fig_fg.add_hline(y=45, line_dash="dot", line_color="orange", annotation_text="Fear")
+        fig_fg.add_hline(y=55, line_dash="dot", line_color="gray", annotation_text="Neutral")
+        fig_fg.add_hline(y=75, line_dash="dot", line_color="green", annotation_text="Greed")
+
+        fig_fg.update_layout(
+            template="plotly_dark",
+            height=350,
+            margin=dict(l=0, r=0, t=20, b=0),
+            yaxis=dict(range=[0, 100], title="Index (0-100)", fixedrange=True),
+            xaxis=dict(fixedrange=True),
+            dragmode=False,
+            showlegend=False
+        )
+        st.plotly_chart(fig_fg, use_container_width=True, config={"displayModeBar": False})
+
+    st.caption("Source: CNN Fear & Greed Index")
+else:
+    st.info("CNN Fear & Greed data temporarily unavailable.")
 
 # Need to import requests at the top of your file if not already there
 # import requests
