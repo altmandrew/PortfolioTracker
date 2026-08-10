@@ -10,14 +10,60 @@ import numpy as np
 import gspread
 from google.oauth2.service_account import Credentials
 import requests
+import extra_streamlit_components as stx
+from datetime import datetime, timedelta
+import hashlib
+import hmac
 
 st.set_page_config(layout="wide", page_title="Portfolio Pulse")
 
-# -------------------- MULTI-USER LOGIN --------------------
+
+
+# -------------------- COOKIE-BASED AUTH --------------------
+def get_cookie_manager():
+    return stx.CookieManager(key="portfolio_pulse_cookies")
+
+def create_auth_token(email: str) -> str:
+    """Create a simple signed token"""
+    secret = st.secrets.get("cookie_secret", "portfolio-pulse-secret-key-change-me")
+    expiry = (datetime.utcnow() + timedelta(days=30)).strftime("%Y-%m-%d")
+    message = f"{email}|{expiry}"
+    signature = hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+    return f"{message}|{signature}"
+
+def verify_auth_token(token: str):
+    """Verify token and return email if valid"""
+    try:
+        secret = st.secrets.get("cookie_secret", "portfolio-pulse-secret-key-change-me")
+        email, expiry, signature = token.split("|")
+        message = f"{email}|{expiry}"
+        expected_sig = hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+
+        if not hmac.compare_digest(signature, expected_sig):
+            return None
+        if datetime.utcnow() > datetime.strptime(expiry, "%Y-%m-%d"):
+            return None
+        return email
+    except Exception:
+        return None
+
 def check_login():
+    cookie_manager = get_cookie_manager()
+
+    # Already authenticated in this session?
     if st.session_state.get("authenticated"):
         return True
 
+    # Check for existing cookie
+    token = cookie_manager.get("auth_token")
+    if token:
+        email = verify_auth_token(token)
+        if email:
+            st.session_state["authenticated"] = True
+            st.session_state["user_email"] = email
+            return True
+
+    # Show login form
     st.title("🔒 Portfolio Pulse – Login")
     st.write("Please enter your email and password.")
 
@@ -30,23 +76,36 @@ def check_login():
             try:
                 accounts = st.secrets["accounts"]
                 accounts_lower = {str(k).lower(): str(v) for k, v in accounts.items()}
+
                 if email in accounts_lower and password == accounts_lower[email]:
+                    # Set session
                     st.session_state["authenticated"] = True
                     st.session_state["user_email"] = email
+
+                    # Set long-lived cookie (30 days)
+                    token = create_auth_token(email)
+                    cookie_manager.set("auth_token", token, expires_at=datetime.utcnow() + timedelta(days=30))
+
+                    st.success("Login successful!")
                     st.rerun()
                 else:
                     st.error("Invalid email or password")
             except Exception as e:
                 st.error("Error reading accounts from Secrets")
                 st.exception(e)
+
     return False
+
 
 if not check_login():
     st.stop()
 
+# Sidebar user info + logout
 with st.sidebar:
     st.markdown(f"**Logged in as:** `{st.session_state['user_email']}`")
     if st.button("Log out"):
+        cookie_manager = get_cookie_manager()
+        cookie_manager.delete("auth_token")
         for key in ["authenticated", "user_email"]:
             st.session_state.pop(key, None)
         st.rerun()
