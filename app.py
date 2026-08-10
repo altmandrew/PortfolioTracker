@@ -455,7 +455,7 @@ else:
 st.divider()
 st.subheader("😱 Fear & Greed Index – Last 30 Days")
 
-@st.cache_data(ttl=3600)  # Cache for 1 hour
+@st.cache_data(ttl=3600)
 def get_fear_greed_30d():
     try:
         url = "https://api.alternative.me/fng/?limit=30&format=json"
@@ -464,9 +464,16 @@ def get_fear_greed_30d():
         data = response.json()["data"]
 
         df = pd.DataFrame(data)
-        df["value"] = df["value"].astype(int)
-        df["date"] = pd.to_datetime(df["timestamp"], unit="s")
+
+        # Clean and convert timestamp properly
+        df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+        df["date"] = pd.to_datetime(df["timestamp"], unit="s", errors="coerce")
+
+        # Remove any bad rows
+        df = df.dropna(subset=["date", "value"])
         df = df.sort_values("date").reset_index(drop=True)
+
         return df
     except Exception as e:
         st.warning(f"Could not load Fear & Greed data: {e}")
