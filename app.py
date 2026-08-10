@@ -560,13 +560,13 @@ else:
 # CNN FEAR & GREED INDEX (Last 30 Days)
 # ============================================================
 st.divider()
-st.subheader("😱 CNN Fear & Greed Index – Last 60 Days")
+st.subheader("😱 CNN Fear & Greed Index – Last 90 Days")
 
 @st.cache_data(ttl=3600)
 def get_cnn_fear_greed_30d():
     try:
         import fear_greed
-        history = fear_greed.get_history(last="60")   # last 60 days
+        history = fear_greed.get_history(last="90")   # last 90 days
         
         df = pd.DataFrame(history)
         df["date"] = pd.to_datetime(df["date"])
