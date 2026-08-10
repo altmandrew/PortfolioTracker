@@ -9,6 +9,7 @@ import io
 import numpy as np
 import gspread
 from google.oauth2.service_account import Credentials
+import requests
 
 st.set_page_config(layout="wide", page_title="Portfolio Pulse")
 
@@ -448,6 +449,87 @@ else:
 # Analysis + Outlook + Projection sections remain the same as before
 # (You can keep the ones you already have or ask me to include them again)
 
+# ============================================================
+# FEAR & GREED INDEX (Last 30 Days)
+# ============================================================
+st.divider()
+st.subheader("😱 Fear & Greed Index – Last 30 Days")
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def get_fear_greed_30d():
+    try:
+        url = "https://api.alternative.me/fng/?limit=30&format=json"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()["data"]
+
+        df = pd.DataFrame(data)
+        df["value"] = df["value"].astype(int)
+        df["date"] = pd.to_datetime(df["timestamp"], unit="s")
+        df = df.sort_values("date").reset_index(drop=True)
+        return df
+    except Exception as e:
+        st.warning(f"Could not load Fear & Greed data: {e}")
+        return pd.DataFrame()
+
+# Need to import requests at the top of your file if not already there
+# import requests
+
+fg_df = get_fear_greed_30d()
+
+if not fg_df.empty:
+    current_value = fg_df.iloc[-1]["value"]
+    current_label = fg_df.iloc[-1]["value_classification"]
+
+    # Color based on current level
+    if current_value <= 25:
+        color = "#e74c3c"      # Extreme Fear - red
+    elif current_value <= 45:
+        color = "#e67e22"      # Fear - orange
+    elif current_value <= 55:
+        color = "#f1c40f"      # Neutral - yellow
+    elif current_value <= 75:
+        color = "#2ecc71"      # Greed - green
+    else:
+        color = "#27ae60"      # Extreme Greed - dark green
+
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        st.metric("Current Fear & Greed", f"{current_value}", delta=current_label)
+
+    with col2:
+        fig_fg = go.Figure()
+
+        fig_fg.add_trace(go.Scatter(
+            x=fg_df["date"],
+            y=fg_df["value"],
+            mode="lines+markers",
+            line=dict(color=color, width=3),
+            fill="tozeroy",
+            name="Fear & Greed"
+        ))
+
+        # Add horizontal reference lines
+        fig_fg.add_hline(y=25, line_dash="dot", line_color="red", annotation_text="Extreme Fear")
+        fig_fg.add_hline(y=45, line_dash="dot", line_color="orange", annotation_text="Fear")
+        fig_fg.add_hline(y=55, line_dash="dot", line_color="gray", annotation_text="Neutral")
+        fig_fg.add_hline(y=75, line_dash="dot", line_color="green", annotation_text="Greed")
+
+        fig_fg.update_layout(
+            template="plotly_dark",
+            height=350,
+            margin=dict(l=0, r=0, t=20, b=0),
+            yaxis=dict(range=[0, 100], title="Index (0-100)", fixedrange=True),
+            xaxis=dict(title="", fixedrange=True),
+            dragmode=False,
+            showlegend=False
+        )
+
+        st.plotly_chart(fig_fg, use_container_width=True, config={"displayModeBar": False})
+
+    st.caption("Source: alternative.me Crypto Fear & Greed Index (updated daily)")
+else:
+    st.info("Fear & Greed data temporarily unavailable.")
 
 # ============================================================
 # CURRENT PORTFOLIO ANALYSIS
