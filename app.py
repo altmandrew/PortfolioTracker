@@ -846,7 +846,11 @@ if page == "🏠 Home":
 elif page == "📰 News":
     st.title("📰 Market News")
 
-    import feedparser
+    try:
+        import feedparser
+    except ImportError:
+        st.error("`feedparser` is not installed. Add it to requirements.txt and reboot the app.")
+        st.stop()
 
     CHANNELS = {
         "Meet Kevin": {
@@ -863,28 +867,47 @@ elif page == "📰 News":
         }
     }
 
-    @st.cache_data(ttl=1800)
     def get_recent_videos(channel_id: str, max_results: int = 3):
         feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
-        feed = feedparser.parse(feed_url)
-        videos = []
-        for entry in feed.entries[:max_results]:
-            video_id = getattr(entry, "yt_videoid", entry.link.split("v=")[-1])
-            videos.append({
-                "title": entry.title,
-                "link": entry.link,
-                "published": entry.published[:10] if hasattr(entry, "published") else "",
-                "video_id": video_id,
-                "thumbnail": f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg"
-            })
-        return videos
+        try:
+            feed = feedparser.parse(feed_url)
+            
+            if feed.bozo:
+                st.warning(f"Feed parsing issue for {channel_id}: {feed.bozo_exception}")
+            
+            videos = []
+            for entry in feed.entries[:max_results]:
+                # Extract video ID safely
+                video_id = None
+                if hasattr(entry, "yt_videoid"):
+                    video_id = entry.yt_videoid
+                elif "v=" in entry.link:
+                    video_id = entry.link.split("v=")[-1].split("&")[0]
+                
+                if not video_id:
+                    continue
+
+                videos.append({
+                    "title": entry.title,
+                    "link": entry.link,
+                    "published": getattr(entry, "published", "")[:10],
+                    "video_id": video_id,
+                    "thumbnail": f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg"
+                })
+            return videos
+        except Exception as e:
+            st.error(f"Error fetching videos: {e}")
+            return []
 
     for channel_name, config in CHANNELS.items():
         st.subheader(channel_name)
-        videos = get_recent_videos(config["channel_id"], config["count"])
+        
+        with st.spinner(f"Loading {channel_name}..."):
+            videos = get_recent_videos(config["channel_id"], config["count"])
 
         if not videos:
-            st.info(f"No videos found for {channel_name}")
+            st.info(f"No videos found for {channel_name}. Check channel ID or try again later.")
+            st.markdown(f"Debug link: [RSS Feed](https://www.youtube.com/feeds/videos.xml?channel_id={config['channel_id']})")
             continue
 
         for video in videos:
@@ -910,10 +933,9 @@ elif page == "📰 News":
                             summary = full_text
 
                         st.write(summary)
-                        st.caption("Transcript-based summary")
                     except Exception as e:
-                        st.warning("Summary not available for this video.")
-                        st.caption(str(e)[:150])
+                        st.warning("Could not generate summary.")
+                        st.caption(str(e)[:200])
 
             st.markdown("---")
                     
