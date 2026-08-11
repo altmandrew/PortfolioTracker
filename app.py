@@ -440,7 +440,7 @@ if st.sidebar.button("🗑️ Reset My Data", type="secondary"):
     st.success("Your data has been reset")
     st.rerun()
 
-
+if page == "🏠 Home":
 # --- MAIN DASHBOARD ---
 st.title("📈 Portfolio Pulse")
 
@@ -842,4 +842,78 @@ if run_projection:
     st.caption("Assumption: Contributions at end of each year. Returns compounded annually.")
 else:
     st.info("Adjust the sliders above, then click **Run Projection**.")
+
+elif page == "📰 News":
+    st.title("📰 Market News")
+
+    import feedparser
+
+    CHANNELS = {
+        "Meet Kevin": {
+            "channel_id": "UCUvvj5lwue7PspotMDjk5UA",
+            "count": 3
+        },
+        "Bravos Research": {
+            "channel_id": "UCOHxDwCcOzBaLkeTazanwcw",
+            "count": 2
+        },
+        "FX Evolution": {
+            "channel_id": "UCvJZEG5x-DVYZKTz--pS39w",
+            "count": 1
+        }
+    }
+
+    @st.cache_data(ttl=1800)
+    def get_recent_videos(channel_id: str, max_results: int = 3):
+        feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+        feed = feedparser.parse(feed_url)
+        videos = []
+        for entry in feed.entries[:max_results]:
+            video_id = getattr(entry, "yt_videoid", entry.link.split("v=")[-1])
+            videos.append({
+                "title": entry.title,
+                "link": entry.link,
+                "published": entry.published[:10] if hasattr(entry, "published") else "",
+                "video_id": video_id,
+                "thumbnail": f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg"
+            })
+        return videos
+
+    for channel_name, config in CHANNELS.items():
+        st.subheader(channel_name)
+        videos = get_recent_videos(config["channel_id"], config["count"])
+
+        if not videos:
+            st.info(f"No videos found for {channel_name}")
+            continue
+
+        for video in videos:
+            col1, col2 = st.columns([1, 4])
+
+            with col1:
+                st.image(video["thumbnail"], use_container_width=True)
+
+            with col2:
+                st.markdown(f"### [{video['title']}]({video['link']})")
+                st.caption(f"Published: {video['published']}")
+
+                with st.expander("🧠 AI Summary of this video", expanded=False):
+                    try:
+                        from youtube_transcript_api import YouTubeTranscriptApi
+                        transcript = YouTubeTranscriptApi.get_transcript(video["video_id"])
+                        full_text = " ".join([t["text"] for t in transcript])
+
+                        words = full_text.split()
+                        if len(words) > 600:
+                            summary = " ".join(words[:350]) + "\n\n...\n\n" + " ".join(words[-150:])
+                        else:
+                            summary = full_text
+
+                        st.write(summary)
+                        st.caption("Transcript-based summary")
+                    except Exception as e:
+                        st.warning("Summary not available for this video.")
+                        st.caption(str(e)[:150])
+
+            st.markdown("---")
                     
