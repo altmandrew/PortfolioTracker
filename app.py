@@ -960,38 +960,38 @@ elif page == "📰 News":
     }
 
     @st.cache_data(ttl=60)
-def get_recent_videos(channel_id: str, max_results: int = 3):
-    YOUTUBE_API_KEY = st.secrets.get("youtube", {}).get("api_key", None)
+    def get_recent_videos(channel_id: str, max_results: int = 3):
+        YOUTUBE_API_KEY = st.secrets.get("youtube", {}).get("api_key", None)
+        
+        if not YOUTUBE_API_KEY:
+            st.error("❌ No YouTube API key found in secrets")
+            return []
     
-    if not YOUTUBE_API_KEY:
-        st.error("❌ No YouTube API key found in secrets")
-        return []
-
-    url = "https://www.googleapis.com/youtube/v3/search"
-    params = {
-        "key": YOUTUBE_API_KEY,
-        "channelId": channel_id,
-        "part": "snippet",
-        "order": "date",
-        "maxResults": max_results,
-        "type": "video"
-    }
-
-    try:
-        response = requests.get(url, params=params, timeout=15)
-        
-        # Show status for debugging
-        st.write(f"Debug - Status code: {response.status_code}")
-        
-        if response.status_code != 200:
-            st.error(f"API Error Response: {response.text[:500]}")
-            return []
-
-        data = response.json()
-        
-        if "error" in data:
-            st.error(f"YouTube API Error: {data['error']}")
-            return []
+        url = "https://www.googleapis.com/youtube/v3/search"
+        params = {
+            "key": YOUTUBE_API_KEY,
+            "channelId": channel_id,
+            "part": "snippet",
+            "order": "date",
+            "maxResults": max_results,
+            "type": "video"
+        }
+    
+        try:
+            response = requests.get(url, params=params, timeout=15)
+            
+            # Show status for debugging
+            st.write(f"Debug - Status code: {response.status_code}")
+            
+            if response.status_code != 200:
+                st.error(f"API Error Response: {response.text[:500]}")
+                return []
+    
+            data = response.json()
+            
+            if "error" in data:
+                st.error(f"YouTube API Error: {data['error']}")
+                return []
 
         videos = []
         for item in data.get("items", []):
