@@ -441,407 +441,407 @@ if st.sidebar.button("🗑️ Reset My Data", type="secondary"):
     st.rerun()
 
 if page == "🏠 Home":
-# --- MAIN DASHBOARD ---
-st.title("📈 Portfolio Pulse")
-
-holdings = load_holdings()
-total_value = 0.0
-
-if not holdings.empty:
-    with st.spinner("Updating live prices..."):
-        holdings["Price"] = holdings.apply(lambda x: get_mark_price(x["Symbol"], x["Type"]), axis=1)
-        holdings["Multiplier"] = holdings["Type"].apply(lambda t: 100 if t == "Option" else 1)
-        holdings["Market Value"] = holdings["Price"] * holdings["Quantity"] * holdings["Multiplier"]
-        holdings["P&L ($)"] = (holdings["Price"] - holdings["Average Cost"]) * holdings["Quantity"] * holdings["Multiplier"]
-        total_value = holdings["Market Value"].sum()
-        holdings["Weight (%)"] = (holdings["Market Value"] / total_value * 100) if total_value > 0 else 0
-        total_pnl = holdings["P&L ($)"].sum()
-
-    hist_df = update_history(total_value)
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total Value", f"${total_value:,.2f}")
-    if len(hist_df) >= 2:
-        prev = hist_df.iloc[-2]["Value"]
-        change = total_value - prev
-        pct = (change / prev * 100) if prev else 0
-        m2.metric("Day Change", f"${change:,.2f}", delta=f"{pct:.2f}%")
-    else:
-        m2.metric("Day Change", "N/A")
-    m3.metric("Total P&L", f"${total_pnl:,.2f}")
-    m4.metric("Holdings", len(holdings))
-
-    st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Data stored in Google Sheets")
-
-    # Historical Performance Chart
-st.subheader("Portfolio Performance")
-
-# Initialize selected timeframe in session state
-if "hist_timeframe" not in st.session_state:
-    st.session_state.hist_timeframe = "1M"
-
-# Button row
-cols = st.columns(6)
-timeframes = ["1W", "1M", "6M", "YTD", "1Y", "Lifetime"]
-
-for i, tf in enumerate(timeframes):
-    if cols[i].button(tf, key=f"tf_{tf}", use_container_width=True,
-                      type="primary" if st.session_state.hist_timeframe == tf else "secondary"):
-        st.session_state.hist_timeframe = tf
-        st.rerun()
-
-timeframe = st.session_state.hist_timeframe
-
-# Filter data based on selected timeframe
-hist_df["Date"] = pd.to_datetime(hist_df["Date"])
-now = datetime.now()
-
-if timeframe == "1W":
-    start_date = now - timedelta(days=7)
-elif timeframe == "1M":
-    start_date = now - timedelta(days=30)
-elif timeframe == "6M":
-    start_date = now - timedelta(days=180)
-elif timeframe == "YTD":
-    start_date = datetime(now.year, 1, 1)
-elif timeframe == "1Y":
-    start_date = now - timedelta(days=365)
-else:  # Lifetime
-    start_date = hist_df["Date"].min()
-
-filtered_hist = hist_df[hist_df["Date"] >= start_date]
-
-# Chart
-fig = go.Figure()
-fig.add_trace(go.Scatter(
-    x=filtered_hist["Date"],
-    y=filtered_hist["Value"],
-    mode="lines+markers",
-    line=dict(color="#00d1b2", width=3),
-    fill="tozeroy",
-    name="Total Value"
-))
-fig.update_layout(
-    template="plotly_dark",
-    height=350,
-    margin=dict(l=0, r=0, t=20, b=0),
-    yaxis_title="Portfolio Value ($)",
-    xaxis=dict(fixedrange=True),
-    yaxis=dict(fixedrange=True),
-    dragmode=False
-)
-st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-
-# Analysis + Outlook + Projection sections remain the same as before
-# (You can keep the ones you already have or ask me to include them again)
-# ------------------ HOLDINGS TABLE ------------------
-st.subheader("Current Positions")
-
-if not holdings.empty:
-    display_df = holdings[[
-        "Symbol", "Type", "Quantity", "Average Cost",
-        "Price", "Market Value", "Weight (%)", "P&L ($)"
-    ]].copy()
-
-    st.dataframe(
-        display_df.style.format({
-            "Quantity": "{:,.2f}",
-            "Average Cost": "${:,.4f}",
-            "Price": "${:,.2f}",
-            "Market Value": "${:,.2f}",
-            "Weight (%)": "{:.1f}%",
-            "P&L ($)": "${:,.2f}"
-        }),
-        use_container_width=True,
-        hide_index=True
-    )
-else:
-    st.info("No holdings to display.")
-
-# ============================================================
-# CNN FEAR & GREED INDEX (Last 30 Days)
-# ============================================================
-st.divider()
-st.subheader("😱 CNN Fear & Greed Index – Last 90 Days")
-
-@st.cache_data(ttl=3600)
-def get_cnn_fear_greed_30d():
-    try:
-        import fear_greed
-        history = fear_greed.get_history(last="90")   # last 90 days
-        
-        df = pd.DataFrame(history)
-        df["date"] = pd.to_datetime(df["date"])
-        df = df.sort_values("date").reset_index(drop=True)
-        return df
-    except Exception as e:
-        st.warning(f"Could not load CNN Fear & Greed data: {e}")
-        return pd.DataFrame()
-
-fg_df = get_cnn_fear_greed_30d()
-
-if not fg_df.empty:
-    current_value = fg_df.iloc[-1]["score"]
-    current_label = fg_df.iloc[-1].get("rating", "").title()
-
-    # Color coding
-    if current_value <= 25:
-        color = "#e74c3c"
-    elif current_value <= 45:
-        color = "#e67e22"
-    elif current_value <= 55:
-        color = "#f1c40f"
-    elif current_value <= 75:
-        color = "#2ecc71"
-    else:
-        color = "#27ae60"
-
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        st.metric("Current CNN Fear & Greed", f"{current_value:.0f}", delta=current_label)
-
-    with col2:
-        fig_fg = go.Figure()
-        fig_fg.add_trace(go.Scatter(
-            x=fg_df["date"],
-            y=fg_df["score"],
-            mode="lines+markers",
-            line=dict(color=color, width=3),
-            fill="tozeroy",
-            name="CNN Fear & Greed"
-        ))
-
-        # Reference lines
-        fig_fg.add_hline(y=25, line_dash="dot", line_color="red", annotation_text="Extreme Fear")
-        fig_fg.add_hline(y=45, line_dash="dot", line_color="orange", annotation_text="Fear")
-        fig_fg.add_hline(y=55, line_dash="dot", line_color="gray", annotation_text="Neutral")
-        fig_fg.add_hline(y=75, line_dash="dot", line_color="green", annotation_text="Greed")
-
-        fig_fg.update_layout(
-            template="plotly_dark",
-            height=350,
-            margin=dict(l=0, r=0, t=20, b=0),
-            yaxis=dict(range=[0, 100], title="Index (0-100)", fixedrange=True),
-            xaxis=dict(fixedrange=True),
-            dragmode=False,
-            showlegend=False
-        )
-        st.plotly_chart(fig_fg, use_container_width=True, config={"displayModeBar": False})
-
-    st.caption("Source: CNN Fear & Greed Index")
-else:
-    st.info("CNN Fear & Greed data temporarily unavailable.")
-
-# Need to import requests at the top of your file if not already there
-# import requests
-
-
-
-# ============================================================
-# CURRENT PORTFOLIO ANALYSIS
-# ============================================================
-st.divider()
-st.header("🔍 Current Portfolio Analysis")
-
-if holdings.empty:
-    st.info("Add holdings to see portfolio analysis.")
-else:
-    total = holdings["Market Value"].sum()
-    cash_val = holdings.loc[holdings["Type"] == "Cash", "Market Value"].sum()
-    bond_val = holdings.loc[holdings["Symbol"].str.contains("BND|AGG|TLT|IEF|BNDX", case=False, na=False), "Market Value"].sum()
-    option_val = holdings.loc[holdings["Type"] == "Option", "Market Value"].sum()
-    equity_val = total - cash_val - bond_val - option_val
-
-    cash_pct = cash_val / total * 100 if total > 0 else 0
-    bond_pct = bond_val / total * 100 if total > 0 else 0
-    option_pct = option_val / total * 100 if total > 0 else 0
-    equity_pct = equity_val / total * 100 if total > 0 else 0
-
-    has_leveraged_options = any(
-        (holdings["Type"] == "Option") & 
-        (holdings["Symbol"].str.contains("TQQQ|SQQQ|UPRO|SPXU|TNA|TZA", case=False, na=False))
-    )
-
-    if has_leveraged_options and option_pct > 10:
-        style = "Aggressive / High-Beta Growth"
-        best_market = "Strong Bull Market"
-        description = "This portfolio is built for maximum upside in a rising market, driven by leveraged long calls."
-        risks = "High volatility and significant drawdown risk in corrections or bear markets."
-    elif equity_pct > 70 and option_pct < 10 and bond_pct < 20:
-        style = "Growth-Oriented Equity"
-        best_market = "Bull Market"
-        description = "Primarily equity-focused with limited defensive holdings."
-        risks = "Vulnerable to broad market pullbacks."
-    elif bond_pct > 30 or (bond_pct + cash_pct) > 40:
-        style = "Balanced / Defensive"
-        best_market = "Sideways to Mildly Bearish Markets"
-        description = "Meaningful allocation to bonds/cash provides ballast."
-        risks = "Will lag significantly in strong bull markets."
-    else:
-        style = "Moderately Aggressive"
-        best_market = "Bull Market with moderate volatility"
-        description = "Mix of growth exposure and some defensive elements."
-        risks = "Still carries meaningful equity risk."
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Portfolio Style", style)
-        st.metric("Best Suited Market", best_market)
-    with col2:
-        st.markdown("**Current Allocation**")
-        st.write(f"• Equity / Other: **{equity_pct:.1f}%**")
-        st.write(f"• Options: **{option_pct:.1f}%**")
-        st.write(f"• Bonds: **{bond_pct:.1f}%**")
-        st.write(f"• Cash: **{cash_pct:.1f}%**")
-
-    st.markdown(f"**Analysis:** {description}")
-    st.markdown(f"**Key Risk:** {risks}")
-
-
-# ============================================================
-# OUTLOOK SUGGESTIONS
-# ============================================================
-st.divider()
-st.header("🎯 Suggested Portfolio Changes by Market Outlook")
-
-outlook = st.selectbox("Select Market Outlook", ["Bullish", "Neutral", "Bearish"])
-
-has_bnd = any(holdings["Symbol"].str.contains("BND", case=False)) if not holdings.empty else False
-has_tqqq_calls = any(
-    (holdings["Type"] == "Option") & (holdings["Symbol"].str.contains("TQQQ", case=False))
-) if not holdings.empty else False
-has_cash = any(holdings["Type"] == "Cash") if not holdings.empty else False
-cash_amount = holdings.loc[holdings["Type"] == "Cash", "Market Value"].sum() if has_cash else 0
-bond_weight = (
-    holdings.loc[holdings["Symbol"].str.contains("BND", case=False), "Market Value"].sum() / total_value * 100
-) if has_bnd and total_value > 0 else 0
-option_weight = (
-    holdings.loc[holdings["Type"] == "Option", "Market Value"].sum() / total_value * 100
-) if not holdings.empty and total_value > 0 else 0
-
-if outlook == "Bullish":
-    st.subheader("📈 Bullish Recommendations")
-    st.success("Goal: Maximize upside participation.")
-    suggestions = []
-    if has_cash and cash_amount > 1000:
-        suggestions.append(f"**Deploy Cash**: You have ~${cash_amount:,.0f} in cash. Consider deploying into growth positions.")
-    if has_bnd and bond_weight > 15:
-        suggestions.append(f"**Reduce Bonds**: BND is ~{bond_weight:.1f}% of the portfolio. Consider rotating into equities.")
-    if has_tqqq_calls:
-        suggestions.append("**Keep / Add to TQQQ Calls**: Your long-dated calls are well positioned for upside.")
-    else:
-        suggestions.append("**Add Leveraged Upside**: Consider long-dated TQQQ or QQQ calls.")
-    suggestions.append("**Increase Equity Beta** and avoid new protective puts.")
-    for i, s in enumerate(suggestions, 1):
-        st.markdown(f"{i}. {s}")
-
-elif outlook == "Neutral":
-    st.subheader("⚖️ Neutral Recommendations")
-    st.info("Goal: Maintain balance and stay flexible.")
-    suggestions = []
-    if option_weight > 20:
-        suggestions.append(f"**Trim Options**: Options are ~{option_weight:.1f}% of the portfolio. Consider taking partial profits.")
-    if has_cash and cash_amount < total_value * 0.05:
-        suggestions.append("**Build a small cash buffer** (aim for 5–10%).")
-    if has_bnd:
-        suggestions.append("**Keep core bond allocation** for stability.")
-    suggestions.append("**Rebalance** any position that has grown too large.")
-    for i, s in enumerate(suggestions, 1):
-        st.markdown(f"{i}. {s}")
-
-else:  # Bearish
-    st.subheader("📉 Bearish Recommendations")
-    st.warning("Goal: Preserve capital.")
-    suggestions = []
-    if has_tqqq_calls:
-        suggestions.append("**Reduce or exit TQQQ Calls**: Leveraged long calls can lose significant value quickly in a sell-off. Strongly consider closing or heavily trimming these positions.")
-
-    if has_cash and cash_amount < total_value * 0.15:
-        suggestions.append(f"**Increase Cash**: Raise cash to at least 15–25% of the portfolio (currently ~${cash_amount:,.0f}).")
-
-    if has_bnd and bond_weight < 25:
-        suggestions.append(f"**Increase Bond Allocation**: BND is a defensive holding. Consider adding more (current weight ~{bond_weight:.1f}%).")
-
-    suggestions.append("**Reduce overall equity exposure**: Trim high-beta stocks and growth positions.")
-    suggestions.append("**Consider protective puts** on major indices (QQQ or SPY) if you want to keep some equity exposure.")
-    suggestions.append("**Avoid new leveraged long positions** until the trend clearly turns.")
-
-    for i, s in enumerate(suggestions, 1):
-        st.markdown(f"{i}. {s}")
-
-st.caption("These are general suggestions based on your current holdings and the selected outlook. They are not personalized financial advice.")
-
-# ============================================================
-# PROJECTION CALCULATOR (with Run button)
-# ============================================================
-st.divider()
-st.header("🔮 Portfolio Projection Calculator")
-
-with st.form("projection_form"):
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        annual_contribution = st.slider(
-            "Annual Contribution ($)", 0, 100000, 10000, 1000
-        )
-    with col2:
-        expected_return = st.slider(
-            "Expected Annual Return (%)", 0.0, 20.0, 8.0, 0.5
-        )
-    with col3:
-        years = st.slider(
-            "Time Horizon (Years)", 1, 50, 20
-        )
-
-    run_projection = st.form_submit_button("▶ Run Projection", type="primary")
-
-if run_projection:
-    start_value = total_value if total_value > 0 else 0
-    r = expected_return / 100
-    years_list = list(range(0, years + 1))
-    values = []
-
-    for y in years_list:
-        if r == 0:
-            fv = start_value + annual_contribution * y
+    # --- MAIN DASHBOARD ---
+    st.title("📈 Portfolio Pulse")
+    
+    holdings = load_holdings()
+    total_value = 0.0
+    
+    if not holdings.empty:
+        with st.spinner("Updating live prices..."):
+            holdings["Price"] = holdings.apply(lambda x: get_mark_price(x["Symbol"], x["Type"]), axis=1)
+            holdings["Multiplier"] = holdings["Type"].apply(lambda t: 100 if t == "Option" else 1)
+            holdings["Market Value"] = holdings["Price"] * holdings["Quantity"] * holdings["Multiplier"]
+            holdings["P&L ($)"] = (holdings["Price"] - holdings["Average Cost"]) * holdings["Quantity"] * holdings["Multiplier"]
+            total_value = holdings["Market Value"].sum()
+            holdings["Weight (%)"] = (holdings["Market Value"] / total_value * 100) if total_value > 0 else 0
+            total_pnl = holdings["P&L ($)"].sum()
+    
+        hist_df = update_history(total_value)
+    
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Total Value", f"${total_value:,.2f}")
+        if len(hist_df) >= 2:
+            prev = hist_df.iloc[-2]["Value"]
+            change = total_value - prev
+            pct = (change / prev * 100) if prev else 0
+            m2.metric("Day Change", f"${change:,.2f}", delta=f"{pct:.2f}%")
         else:
-            fv = start_value * (1 + r)**y + annual_contribution * (((1 + r)**y - 1) / r)
-        values.append(fv)
-
-    final_value = values[-1]
-    total_contributed = annual_contribution * years
-    growth = final_value - start_value - total_contributed
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Starting Value", f"${start_value:,.0f}")
-    m2.metric("Total Contributions", f"${total_contributed:,.0f}")
-    m3.metric("Investment Growth", f"${growth:,.0f}")
-    m4.metric(f"Value in {years} Years", f"${final_value:,.0f}")
-
-    fig_proj = go.Figure()
-    fig_proj.add_trace(go.Scatter(
-        x=years_list, y=values,
+            m2.metric("Day Change", "N/A")
+        m3.metric("Total P&L", f"${total_pnl:,.2f}")
+        m4.metric("Holdings", len(holdings))
+    
+        st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Data stored in Google Sheets")
+    
+        # Historical Performance Chart
+    st.subheader("Portfolio Performance")
+    
+    # Initialize selected timeframe in session state
+    if "hist_timeframe" not in st.session_state:
+        st.session_state.hist_timeframe = "1M"
+    
+    # Button row
+    cols = st.columns(6)
+    timeframes = ["1W", "1M", "6M", "YTD", "1Y", "Lifetime"]
+    
+    for i, tf in enumerate(timeframes):
+        if cols[i].button(tf, key=f"tf_{tf}", use_container_width=True,
+                          type="primary" if st.session_state.hist_timeframe == tf else "secondary"):
+            st.session_state.hist_timeframe = tf
+            st.rerun()
+    
+    timeframe = st.session_state.hist_timeframe
+    
+    # Filter data based on selected timeframe
+    hist_df["Date"] = pd.to_datetime(hist_df["Date"])
+    now = datetime.now()
+    
+    if timeframe == "1W":
+        start_date = now - timedelta(days=7)
+    elif timeframe == "1M":
+        start_date = now - timedelta(days=30)
+    elif timeframe == "6M":
+        start_date = now - timedelta(days=180)
+    elif timeframe == "YTD":
+        start_date = datetime(now.year, 1, 1)
+    elif timeframe == "1Y":
+        start_date = now - timedelta(days=365)
+    else:  # Lifetime
+        start_date = hist_df["Date"].min()
+    
+    filtered_hist = hist_df[hist_df["Date"] >= start_date]
+    
+    # Chart
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=filtered_hist["Date"],
+        y=filtered_hist["Value"],
         mode="lines+markers",
         line=dict(color="#00d1b2", width=3),
         fill="tozeroy",
-        name="Projected Value"
+        name="Total Value"
     ))
-    fig_proj.update_layout(
+    fig.update_layout(
         template="plotly_dark",
-        height=400,
-        margin=dict(l=0, r=0, t=30, b=0),
-        xaxis_title="Years from Now",
+        height=350,
+        margin=dict(l=0, r=0, t=20, b=0),
         yaxis_title="Portfolio Value ($)",
-        title=f"Projected Growth at {expected_return}% annual return",
         xaxis=dict(fixedrange=True),
         yaxis=dict(fixedrange=True),
         dragmode=False
     )
-    st.plotly_chart(fig_proj, use_container_width=True, config={"displayModeBar": False})
-    st.caption("Assumption: Contributions at end of each year. Returns compounded annually.")
-else:
-    st.info("Adjust the sliders above, then click **Run Projection**.")
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    
+    
+    # Analysis + Outlook + Projection sections remain the same as before
+    # (You can keep the ones you already have or ask me to include them again)
+    # ------------------ HOLDINGS TABLE ------------------
+    st.subheader("Current Positions")
+    
+    if not holdings.empty:
+        display_df = holdings[[
+            "Symbol", "Type", "Quantity", "Average Cost",
+            "Price", "Market Value", "Weight (%)", "P&L ($)"
+        ]].copy()
+    
+        st.dataframe(
+            display_df.style.format({
+                "Quantity": "{:,.2f}",
+                "Average Cost": "${:,.4f}",
+                "Price": "${:,.2f}",
+                "Market Value": "${:,.2f}",
+                "Weight (%)": "{:.1f}%",
+                "P&L ($)": "${:,.2f}"
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("No holdings to display.")
+    
+    # ============================================================
+    # CNN FEAR & GREED INDEX (Last 30 Days)
+    # ============================================================
+    st.divider()
+    st.subheader("😱 CNN Fear & Greed Index – Last 90 Days")
+    
+    @st.cache_data(ttl=3600)
+    def get_cnn_fear_greed_30d():
+        try:
+            import fear_greed
+            history = fear_greed.get_history(last="90")   # last 90 days
+            
+            df = pd.DataFrame(history)
+            df["date"] = pd.to_datetime(df["date"])
+            df = df.sort_values("date").reset_index(drop=True)
+            return df
+        except Exception as e:
+            st.warning(f"Could not load CNN Fear & Greed data: {e}")
+            return pd.DataFrame()
+    
+    fg_df = get_cnn_fear_greed_30d()
+    
+    if not fg_df.empty:
+        current_value = fg_df.iloc[-1]["score"]
+        current_label = fg_df.iloc[-1].get("rating", "").title()
+    
+        # Color coding
+        if current_value <= 25:
+            color = "#e74c3c"
+        elif current_value <= 45:
+            color = "#e67e22"
+        elif current_value <= 55:
+            color = "#f1c40f"
+        elif current_value <= 75:
+            color = "#2ecc71"
+        else:
+            color = "#27ae60"
+    
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            st.metric("Current CNN Fear & Greed", f"{current_value:.0f}", delta=current_label)
+    
+        with col2:
+            fig_fg = go.Figure()
+            fig_fg.add_trace(go.Scatter(
+                x=fg_df["date"],
+                y=fg_df["score"],
+                mode="lines+markers",
+                line=dict(color=color, width=3),
+                fill="tozeroy",
+                name="CNN Fear & Greed"
+            ))
+    
+            # Reference lines
+            fig_fg.add_hline(y=25, line_dash="dot", line_color="red", annotation_text="Extreme Fear")
+            fig_fg.add_hline(y=45, line_dash="dot", line_color="orange", annotation_text="Fear")
+            fig_fg.add_hline(y=55, line_dash="dot", line_color="gray", annotation_text="Neutral")
+            fig_fg.add_hline(y=75, line_dash="dot", line_color="green", annotation_text="Greed")
+    
+            fig_fg.update_layout(
+                template="plotly_dark",
+                height=350,
+                margin=dict(l=0, r=0, t=20, b=0),
+                yaxis=dict(range=[0, 100], title="Index (0-100)", fixedrange=True),
+                xaxis=dict(fixedrange=True),
+                dragmode=False,
+                showlegend=False
+            )
+            st.plotly_chart(fig_fg, use_container_width=True, config={"displayModeBar": False})
+    
+        st.caption("Source: CNN Fear & Greed Index")
+    else:
+        st.info("CNN Fear & Greed data temporarily unavailable.")
+    
+    # Need to import requests at the top of your file if not already there
+    # import requests
+    
+    
+    
+    # ============================================================
+    # CURRENT PORTFOLIO ANALYSIS
+    # ============================================================
+    st.divider()
+    st.header("🔍 Current Portfolio Analysis")
+    
+    if holdings.empty:
+        st.info("Add holdings to see portfolio analysis.")
+    else:
+        total = holdings["Market Value"].sum()
+        cash_val = holdings.loc[holdings["Type"] == "Cash", "Market Value"].sum()
+        bond_val = holdings.loc[holdings["Symbol"].str.contains("BND|AGG|TLT|IEF|BNDX", case=False, na=False), "Market Value"].sum()
+        option_val = holdings.loc[holdings["Type"] == "Option", "Market Value"].sum()
+        equity_val = total - cash_val - bond_val - option_val
+    
+        cash_pct = cash_val / total * 100 if total > 0 else 0
+        bond_pct = bond_val / total * 100 if total > 0 else 0
+        option_pct = option_val / total * 100 if total > 0 else 0
+        equity_pct = equity_val / total * 100 if total > 0 else 0
+    
+        has_leveraged_options = any(
+            (holdings["Type"] == "Option") & 
+            (holdings["Symbol"].str.contains("TQQQ|SQQQ|UPRO|SPXU|TNA|TZA", case=False, na=False))
+        )
+    
+        if has_leveraged_options and option_pct > 10:
+            style = "Aggressive / High-Beta Growth"
+            best_market = "Strong Bull Market"
+            description = "This portfolio is built for maximum upside in a rising market, driven by leveraged long calls."
+            risks = "High volatility and significant drawdown risk in corrections or bear markets."
+        elif equity_pct > 70 and option_pct < 10 and bond_pct < 20:
+            style = "Growth-Oriented Equity"
+            best_market = "Bull Market"
+            description = "Primarily equity-focused with limited defensive holdings."
+            risks = "Vulnerable to broad market pullbacks."
+        elif bond_pct > 30 or (bond_pct + cash_pct) > 40:
+            style = "Balanced / Defensive"
+            best_market = "Sideways to Mildly Bearish Markets"
+            description = "Meaningful allocation to bonds/cash provides ballast."
+            risks = "Will lag significantly in strong bull markets."
+        else:
+            style = "Moderately Aggressive"
+            best_market = "Bull Market with moderate volatility"
+            description = "Mix of growth exposure and some defensive elements."
+            risks = "Still carries meaningful equity risk."
+    
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Portfolio Style", style)
+            st.metric("Best Suited Market", best_market)
+        with col2:
+            st.markdown("**Current Allocation**")
+            st.write(f"• Equity / Other: **{equity_pct:.1f}%**")
+            st.write(f"• Options: **{option_pct:.1f}%**")
+            st.write(f"• Bonds: **{bond_pct:.1f}%**")
+            st.write(f"• Cash: **{cash_pct:.1f}%**")
+    
+        st.markdown(f"**Analysis:** {description}")
+        st.markdown(f"**Key Risk:** {risks}")
+    
+    
+    # ============================================================
+    # OUTLOOK SUGGESTIONS
+    # ============================================================
+    st.divider()
+    st.header("🎯 Suggested Portfolio Changes by Market Outlook")
+    
+    outlook = st.selectbox("Select Market Outlook", ["Bullish", "Neutral", "Bearish"])
+    
+    has_bnd = any(holdings["Symbol"].str.contains("BND", case=False)) if not holdings.empty else False
+    has_tqqq_calls = any(
+        (holdings["Type"] == "Option") & (holdings["Symbol"].str.contains("TQQQ", case=False))
+    ) if not holdings.empty else False
+    has_cash = any(holdings["Type"] == "Cash") if not holdings.empty else False
+    cash_amount = holdings.loc[holdings["Type"] == "Cash", "Market Value"].sum() if has_cash else 0
+    bond_weight = (
+        holdings.loc[holdings["Symbol"].str.contains("BND", case=False), "Market Value"].sum() / total_value * 100
+    ) if has_bnd and total_value > 0 else 0
+    option_weight = (
+        holdings.loc[holdings["Type"] == "Option", "Market Value"].sum() / total_value * 100
+    ) if not holdings.empty and total_value > 0 else 0
+    
+    if outlook == "Bullish":
+        st.subheader("📈 Bullish Recommendations")
+        st.success("Goal: Maximize upside participation.")
+        suggestions = []
+        if has_cash and cash_amount > 1000:
+            suggestions.append(f"**Deploy Cash**: You have ~${cash_amount:,.0f} in cash. Consider deploying into growth positions.")
+        if has_bnd and bond_weight > 15:
+            suggestions.append(f"**Reduce Bonds**: BND is ~{bond_weight:.1f}% of the portfolio. Consider rotating into equities.")
+        if has_tqqq_calls:
+            suggestions.append("**Keep / Add to TQQQ Calls**: Your long-dated calls are well positioned for upside.")
+        else:
+            suggestions.append("**Add Leveraged Upside**: Consider long-dated TQQQ or QQQ calls.")
+        suggestions.append("**Increase Equity Beta** and avoid new protective puts.")
+        for i, s in enumerate(suggestions, 1):
+            st.markdown(f"{i}. {s}")
+    
+    elif outlook == "Neutral":
+        st.subheader("⚖️ Neutral Recommendations")
+        st.info("Goal: Maintain balance and stay flexible.")
+        suggestions = []
+        if option_weight > 20:
+            suggestions.append(f"**Trim Options**: Options are ~{option_weight:.1f}% of the portfolio. Consider taking partial profits.")
+        if has_cash and cash_amount < total_value * 0.05:
+            suggestions.append("**Build a small cash buffer** (aim for 5–10%).")
+        if has_bnd:
+            suggestions.append("**Keep core bond allocation** for stability.")
+        suggestions.append("**Rebalance** any position that has grown too large.")
+        for i, s in enumerate(suggestions, 1):
+            st.markdown(f"{i}. {s}")
+    
+    else:  # Bearish
+        st.subheader("📉 Bearish Recommendations")
+        st.warning("Goal: Preserve capital.")
+        suggestions = []
+        if has_tqqq_calls:
+            suggestions.append("**Reduce or exit TQQQ Calls**: Leveraged long calls can lose significant value quickly in a sell-off. Strongly consider closing or heavily trimming these positions.")
+    
+        if has_cash and cash_amount < total_value * 0.15:
+            suggestions.append(f"**Increase Cash**: Raise cash to at least 15–25% of the portfolio (currently ~${cash_amount:,.0f}).")
+    
+        if has_bnd and bond_weight < 25:
+            suggestions.append(f"**Increase Bond Allocation**: BND is a defensive holding. Consider adding more (current weight ~{bond_weight:.1f}%).")
+    
+        suggestions.append("**Reduce overall equity exposure**: Trim high-beta stocks and growth positions.")
+        suggestions.append("**Consider protective puts** on major indices (QQQ or SPY) if you want to keep some equity exposure.")
+        suggestions.append("**Avoid new leveraged long positions** until the trend clearly turns.")
+    
+        for i, s in enumerate(suggestions, 1):
+            st.markdown(f"{i}. {s}")
+    
+    st.caption("These are general suggestions based on your current holdings and the selected outlook. They are not personalized financial advice.")
+    
+    # ============================================================
+    # PROJECTION CALCULATOR (with Run button)
+    # ============================================================
+    st.divider()
+    st.header("🔮 Portfolio Projection Calculator")
+    
+    with st.form("projection_form"):
+        col1, col2, col3 = st.columns(3)
+    
+        with col1:
+            annual_contribution = st.slider(
+                "Annual Contribution ($)", 0, 100000, 10000, 1000
+            )
+        with col2:
+            expected_return = st.slider(
+                "Expected Annual Return (%)", 0.0, 20.0, 8.0, 0.5
+            )
+        with col3:
+            years = st.slider(
+                "Time Horizon (Years)", 1, 50, 20
+            )
+    
+        run_projection = st.form_submit_button("▶ Run Projection", type="primary")
+    
+    if run_projection:
+        start_value = total_value if total_value > 0 else 0
+        r = expected_return / 100
+        years_list = list(range(0, years + 1))
+        values = []
+    
+        for y in years_list:
+            if r == 0:
+                fv = start_value + annual_contribution * y
+            else:
+                fv = start_value * (1 + r)**y + annual_contribution * (((1 + r)**y - 1) / r)
+            values.append(fv)
+    
+        final_value = values[-1]
+        total_contributed = annual_contribution * years
+        growth = final_value - start_value - total_contributed
+    
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Starting Value", f"${start_value:,.0f}")
+        m2.metric("Total Contributions", f"${total_contributed:,.0f}")
+        m3.metric("Investment Growth", f"${growth:,.0f}")
+        m4.metric(f"Value in {years} Years", f"${final_value:,.0f}")
+    
+        fig_proj = go.Figure()
+        fig_proj.add_trace(go.Scatter(
+            x=years_list, y=values,
+            mode="lines+markers",
+            line=dict(color="#00d1b2", width=3),
+            fill="tozeroy",
+            name="Projected Value"
+        ))
+        fig_proj.update_layout(
+            template="plotly_dark",
+            height=400,
+            margin=dict(l=0, r=0, t=30, b=0),
+            xaxis_title="Years from Now",
+            yaxis_title="Portfolio Value ($)",
+            title=f"Projected Growth at {expected_return}% annual return",
+            xaxis=dict(fixedrange=True),
+            yaxis=dict(fixedrange=True),
+            dragmode=False
+        )
+        st.plotly_chart(fig_proj, use_container_width=True, config={"displayModeBar": False})
+        st.caption("Assumption: Contributions at end of each year. Returns compounded annually.")
+    else:
+        st.info("Adjust the sliders above, then click **Run Projection**.")
 
 elif page == "📰 News":
     st.title("📰 Market News")
