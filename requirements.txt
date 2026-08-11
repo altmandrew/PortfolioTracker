@@ -7,3 +7,5 @@ gspread-dataframe
 google-auth
 fear-greed
 extra-streamlit-components
+feedparser
+youtube-transcript-api
