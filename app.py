@@ -853,62 +853,73 @@ elif page == "📰 News":
         st.stop()
 
     CHANNELS = {
-        "Meet Kevin": {
-            "channel_id": "UCUvvj5lwue7PspotMDjk5UA",
-            "count": 3
-        },
-        "Bravos Research": {
-            "channel_id": "UCOHxDwCcOzBaLkeTazanwcw",
-            "count": 2
-        },
-        "FX Evolution": {
-            "channel_id": "UCvJZEG5x-DVYZKTz--pS39w",
-            "count": 1
-        }
+    "Meet Kevin": {
+        "channel_id": "UCUvvj5lwue7PspotMDjk5UA",
+        "count": 3
+    },
+    "Bravos Research": {
+        "channel_id": "UCOHxDwCcOzBaLkeTazanwcw",
+        "count": 2
+    },
+    "FX Evolution": {
+        "channel_id": "UCvJZEG5x-DVYZKTz--pS39w",
+        "count": 1
     }
+}
 
     def get_recent_videos(channel_id: str, max_results: int = 3):
-        feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
-        
+    """
+    Tries multiple methods to get recent videos because 
+    YouTube's official RSS is unreliable from cloud servers.
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+
+    # Method 1: Uploads playlist (UC → UU)
+    playlist_id = "UU" + channel_id[2:] if channel_id.startswith("UC") else channel_id
+    urls_to_try = [
+        f"https://www.youtube.com/feeds/videos.xml?playlist_id={playlist_id}",
+        f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}",
+        f"https://openrss.org/feeds/youtube/{channel_id}",           # fallback proxy
+    ]
+
+    for url in urls_to_try:
         try:
-            # Fetch with a proper browser User-Agent
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
-            response = requests.get(feed_url, headers=headers, timeout=15)
-            response.raise_for_status()
-    
-            # Parse the content
+            response = requests.get(url, headers=headers, timeout=12)
+            if response.status_code != 200:
+                continue
+
             feed = feedparser.parse(response.content)
-    
+            if not feed.entries:
+                continue
+
             videos = []
             for entry in feed.entries[:max_results]:
                 video_id = None
-                
-                # Try multiple ways to get the video ID
                 if hasattr(entry, "yt_videoid"):
                     video_id = entry.yt_videoid
-                elif "yt:videoId" in entry:
-                    video_id = entry["yt:videoId"]
-                elif "v=" in entry.link:
+                elif "v=" in entry.get("link", ""):
                     video_id = entry.link.split("v=")[-1].split("&")[0]
-    
+
                 if not video_id:
                     continue
-    
+
                 videos.append({
                     "title": entry.get("title", "No title"),
-                    "link": entry.get("link", f"https://www.youtube.com/watch?v={video_id}"),
-                    "published": entry.get("published", "")[:10],
+                    "link": entry.get("link", f"https://youtube.com/watch?v={video_id}"),
+                    "published": str(entry.get("published", ""))[:10],
                     "video_id": video_id,
                     "thumbnail": f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg"
                 })
-            
-            return videos
 
-        except Exception as e:
-            st.error(f"Failed to load videos for channel {channel_id}: {e}")
-            return []
+            if videos:
+                return videos
+
+        except Exception:
+            continue
+
+    return []
 
     for channel_name, config in CHANNELS.items():
         st.subheader(channel_name)
