@@ -111,6 +111,9 @@ with st.sidebar:
         st.rerun()
 # -------------------- END LOGIN --------------------
 
+# -------------------- PAGE NAVIGATION --------------------
+page = st.sidebar.radio("Navigation", ["🏠 Home", "📰 News"], index=0)
+st.sidebar.markdown("---")
 
 # -------------------- GOOGLE SHEETS HELPERS --------------------
 @st.cache_resource
