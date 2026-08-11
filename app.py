@@ -868,58 +868,58 @@ elif page == "📰 News":
 }
 
     def get_recent_videos(channel_id: str, max_results: int = 3):
-    """
-    Tries multiple methods to get recent videos because 
-    YouTube's official RSS is unreliable from cloud servers.
-    """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
-
-    # Method 1: Uploads playlist (UC → UU)
-    playlist_id = "UU" + channel_id[2:] if channel_id.startswith("UC") else channel_id
-    urls_to_try = [
-        f"https://www.youtube.com/feeds/videos.xml?playlist_id={playlist_id}",
-        f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}",
-        f"https://openrss.org/feeds/youtube/{channel_id}",           # fallback proxy
-    ]
-
-    for url in urls_to_try:
-        try:
-            response = requests.get(url, headers=headers, timeout=12)
-            if response.status_code != 200:
-                continue
-
-            feed = feedparser.parse(response.content)
-            if not feed.entries:
-                continue
-
-            videos = []
-            for entry in feed.entries[:max_results]:
-                video_id = None
-                if hasattr(entry, "yt_videoid"):
-                    video_id = entry.yt_videoid
-                elif "v=" in entry.get("link", ""):
-                    video_id = entry.link.split("v=")[-1].split("&")[0]
-
-                if not video_id:
+        """
+        Tries multiple methods to get recent videos because 
+        YouTube's official RSS is unreliable from cloud servers.
+        """
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+    
+        # Method 1: Uploads playlist (UC → UU)
+        playlist_id = "UU" + channel_id[2:] if channel_id.startswith("UC") else channel_id
+        urls_to_try = [
+            f"https://www.youtube.com/feeds/videos.xml?playlist_id={playlist_id}",
+            f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}",
+            f"https://openrss.org/feeds/youtube/{channel_id}",           # fallback proxy
+        ]
+    
+        for url in urls_to_try:
+            try:
+                response = requests.get(url, headers=headers, timeout=12)
+                if response.status_code != 200:
                     continue
-
-                videos.append({
-                    "title": entry.get("title", "No title"),
-                    "link": entry.get("link", f"https://youtube.com/watch?v={video_id}"),
-                    "published": str(entry.get("published", ""))[:10],
-                    "video_id": video_id,
-                    "thumbnail": f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg"
-                })
-
-            if videos:
-                return videos
-
-        except Exception:
-            continue
-
-    return []
+    
+                feed = feedparser.parse(response.content)
+                if not feed.entries:
+                    continue
+    
+                videos = []
+                for entry in feed.entries[:max_results]:
+                    video_id = None
+                    if hasattr(entry, "yt_videoid"):
+                        video_id = entry.yt_videoid
+                    elif "v=" in entry.get("link", ""):
+                        video_id = entry.link.split("v=")[-1].split("&")[0]
+    
+                    if not video_id:
+                        continue
+    
+                    videos.append({
+                        "title": entry.get("title", "No title"),
+                        "link": entry.get("link", f"https://youtube.com/watch?v={video_id}"),
+                        "published": str(entry.get("published", ""))[:10],
+                        "video_id": video_id,
+                        "thumbnail": f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg"
+                    })
+    
+                if videos:
+                    return videos
+    
+            except Exception:
+                continue
+    
+        return []
 
     for channel_name, config in CHANNELS.items():
         st.subheader(channel_name)
