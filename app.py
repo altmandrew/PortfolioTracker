@@ -935,6 +935,74 @@ elif page == "📰 News":
         for video in videos:
             col1, col2 = st.columns([1, 4])
 
+elif page == "📰 News":
+    st.title("📰 Market News")
+
+    YOUTUBE_API_KEY = st.secrets.get("youtube", {}).get("api_key", None)
+
+    if not YOUTUBE_API_KEY:
+        st.error("YouTube API key is missing. Add it to your Streamlit Secrets under [youtube] api_key = \"...\"")
+        st.stop()
+
+    CHANNELS = {
+        "Meet Kevin": {
+            "channel_id": "UCUvvj5lwue7PspotMDjk5UA",
+            "count": 3
+        },
+        "Bravos Research": {
+            "channel_id": "UCOHxDwCcOzBaLkeTazanwcw",
+            "count": 2
+        },
+        "FX Evolution": {
+            "channel_id": "UCvJZEG5x-DVYZKTz--pS39w",
+            "count": 1
+        }
+    }
+
+    @st.cache_data(ttl=1800)
+    def get_recent_videos(channel_id: str, max_results: int = 3):
+        url = "https://www.googleapis.com/youtube/v3/search"
+        params = {
+            "key": YOUTUBE_API_KEY,
+            "channelId": channel_id,
+            "part": "snippet",
+            "order": "date",
+            "maxResults": max_results,
+            "type": "video"
+        }
+        try:
+            response = requests.get(url, params=params, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+
+            videos = []
+            for item in data.get("items", []):
+                video_id = item["id"]["videoId"]
+                snippet = item["snippet"]
+                videos.append({
+                    "title": snippet["title"],
+                    "link": f"https://www.youtube.com/watch?v={video_id}",
+                    "published": snippet["publishedAt"][:10],
+                    "video_id": video_id,
+                    "thumbnail": snippet["thumbnails"]["medium"]["url"]
+                })
+            return videos
+        except Exception as e:
+            st.error(f"API Error: {e}")
+            return []
+
+    for channel_name, config in CHANNELS.items():
+        st.subheader(channel_name)
+        
+        videos = get_recent_videos(config["channel_id"], config["count"])
+
+        if not videos:
+            st.info(f"No videos found for {channel_name}")
+            continue
+
+        for video in videos:
+            col1, col2 = st.columns([1, 4])
+
             with col1:
                 st.image(video["thumbnail"], use_container_width=True)
 
@@ -956,8 +1024,8 @@ elif page == "📰 News":
 
                         st.write(summary)
                     except Exception as e:
-                        st.warning("Could not generate summary.")
-                        st.caption(str(e)[:200])
+                        st.warning("Summary not available for this video.")
+                        st.caption(str(e)[:150])
 
             st.markdown("---")
                     
