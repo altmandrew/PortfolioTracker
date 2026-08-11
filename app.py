@@ -868,36 +868,47 @@ elif page == "📰 News":
     }
 
     def get_recent_videos(channel_id: str, max_results: int = 3):
-        feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
-        try:
-            feed = feedparser.parse(feed_url)
-            
-            if feed.bozo:
-                st.warning(f"Feed parsing issue for {channel_id}: {feed.bozo_exception}")
-            
-            videos = []
-            for entry in feed.entries[:max_results]:
-                # Extract video ID safely
-                video_id = None
-                if hasattr(entry, "yt_videoid"):
-                    video_id = entry.yt_videoid
-                elif "v=" in entry.link:
-                    video_id = entry.link.split("v=")[-1].split("&")[0]
-                
-                if not video_id:
-                    continue
+    feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+    
+    try:
+        # Fetch with a proper browser User-Agent
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        response = requests.get(feed_url, headers=headers, timeout=15)
+        response.raise_for_status()
 
-                videos.append({
-                    "title": entry.title,
-                    "link": entry.link,
-                    "published": getattr(entry, "published", "")[:10],
-                    "video_id": video_id,
-                    "thumbnail": f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg"
-                })
-            return videos
-        except Exception as e:
-            st.error(f"Error fetching videos: {e}")
-            return []
+        # Parse the content
+        feed = feedparser.parse(response.content)
+
+        videos = []
+        for entry in feed.entries[:max_results]:
+            video_id = None
+            
+            # Try multiple ways to get the video ID
+            if hasattr(entry, "yt_videoid"):
+                video_id = entry.yt_videoid
+            elif "yt:videoId" in entry:
+                video_id = entry["yt:videoId"]
+            elif "v=" in entry.link:
+                video_id = entry.link.split("v=")[-1].split("&")[0]
+
+            if not video_id:
+                continue
+
+            videos.append({
+                "title": entry.get("title", "No title"),
+                "link": entry.get("link", f"https://www.youtube.com/watch?v={video_id}"),
+                "published": entry.get("published", "")[:10],
+                "video_id": video_id,
+                "thumbnail": f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg"
+            })
+        
+        return videos
+
+    except Exception as e:
+        st.error(f"Failed to load videos for channel {channel_id}: {e}")
+        return []
 
     for channel_name, config in CHANNELS.items():
         st.subheader(channel_name)
