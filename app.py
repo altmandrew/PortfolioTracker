@@ -1004,39 +1004,76 @@ elif page == "📰 News":
                         "thumbnail": snippet["thumbnails"]["medium"]["url"]
                     })
                 return videos
-        
-            except Exception as e:
-                st.error(f"Exception: {e}")
+elif page == "📰 News":
+    st.title("📰 Market News")
+
+    YOUTUBE_API_KEY = st.secrets.get("youtube", {}).get("api_key")
+
+    if not YOUTUBE_API_KEY:
+        st.error("YouTube API key missing in secrets.")
+        st.stop()
+
+    CHANNELS = {
+        "Meet Kevin": {
+            "channel_id": "UCUvvj5lwue7PspotMDjk5UA",
+            "count": 3
+        },
+        "Bravos Research": {
+            "channel_id": "UCOHxDwCcOzBaLkeTazanwcw",
+            "count": 2
+        },
+        "FX Evolution": {
+            "channel_id": "UCvJZEG5x-DVYZKTz--pS39w",
+            "count": 1
+        }
+    }
+
+    @st.cache_data(ttl=1800)
+    def get_recent_videos(channel_id: str, max_results: int = 3):
+        # Convert channel ID to uploads playlist ID (UC → UU)
+        uploads_playlist_id = "UU" + channel_id[2:]
+
+        url = "https://www.googleapis.com/youtube/v3/playlistItems"
+        params = {
+            "key": YOUTUBE_API_KEY,
+            "playlistId": uploads_playlist_id,
+            "part": "snippet",
+            "maxResults": max_results
+        }
+
+        try:
+            response = requests.get(url, params=params, timeout=15)
+            data = response.json()
+
+            if "error" in data:
                 return []
-        
-                videos = []
-                for item in data.get("items", []):
-                    video_id = item["id"]["videoId"]
-                    snippet = item["snippet"]
-                    videos.append({
-                        "title": snippet["title"],
-                        "link": f"https://www.youtube.com/watch?v={video_id}",
-                        "published": snippet["publishedAt"][:10],
-                        "video_id": video_id,
-                        "thumbnail": snippet["thumbnails"]["medium"]["url"]
-                    })
-                return videos
-        
-            except Exception as e:
-                st.error(f"Exception: {e}")
-                return []
+
+            videos = []
+            for item in data.get("items", []):
+                snippet = item["snippet"]
+                video_id = snippet["resourceId"]["videoId"]
+                videos.append({
+                    "title": snippet["title"],
+                    "link": f"https://www.youtube.com/watch?v={video_id}",
+                    "published": snippet["publishedAt"][:10],
+                    "video_id": video_id,
+                    "thumbnail": snippet["thumbnails"]["medium"]["url"]
+                })
+            return videos
+        except Exception:
+            return []
 
     for channel_name, config in CHANNELS.items():
         st.subheader(channel_name)
-        
+
         videos = get_recent_videos(config["channel_id"], config["count"])
 
         if not videos:
-            st.info(f"No videos found for {channel_name}")
+            st.info(f"Could not load videos for {channel_name} right now.")
             continue
 
         for video in videos:
-            col1, col2 = st.columns([1, 4])
+            col1, col2 = st.columns([1, 3])
 
             with col1:
                 st.image(video["thumbnail"], use_container_width=True)
@@ -1045,22 +1082,22 @@ elif page == "📰 News":
                 st.markdown(f"### [{video['title']}]({video['link']})")
                 st.caption(f"Published: {video['published']}")
 
-                with st.expander("🧠 AI Summary of this video", expanded=False):
+                with st.expander("🧠 AI Summary", expanded=False):
                     try:
                         from youtube_transcript_api import YouTubeTranscriptApi
                         transcript = YouTubeTranscriptApi.get_transcript(video["video_id"])
                         full_text = " ".join([t["text"] for t in transcript])
 
                         words = full_text.split()
-                        if len(words) > 600:
-                            summary = " ".join(words[:350]) + "\n\n...\n\n" + " ".join(words[-150:])
+                        if len(words) > 650:
+                            summary = " ".join(words[:380]) + "\n\n...\n\n" + " ".join(words[-180:])
                         else:
                             summary = full_text
 
                         st.write(summary)
                     except Exception as e:
-                        st.warning("Summary not available for this video.")
-                        st.caption(str(e)[:150])
+                        st.warning("Summary not available.")
+                        st.caption(str(e)[:180])
 
             st.markdown("---")
                     
