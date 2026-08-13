@@ -923,7 +923,7 @@ elif page == "📰 News":
                 st.caption(f"Published: {video['published']}")
 
                 with st.expander("🧠 AI Summary", expanded=False):
- try:
+                  try:
         from youtube_transcript_api import YouTubeTranscriptApi
 
         # New way (works with latest version)
