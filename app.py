@@ -924,24 +924,24 @@ elif page == "📰 News":
 
                 with st.expander("🧠 AI Summary", expanded=False):
                   try:
-        from youtube_transcript_api import YouTubeTranscriptApi
-
-        # New way (works with latest version)
-        ytt_api = YouTubeTranscriptApi()
-        fetched = ytt_api.fetch(video["video_id"])
-
-        # Build the full text from snippets
-        full_text = " ".join([snippet.text for snippet in fetched])
-
-        words = full_text.split()
-        if len(words) > 650:
-            summary = " ".join(words[:380]) + "\n\n...\n\n" + " ".join(words[-180:])
-        else:
-            summary = full_text
-
-        st.write(summary)
-
-    except Exception as e:
-        st.warning("Summary not available for this video.")
-        st.caption(str(e)[:200])
+                    from youtube_transcript_api import YouTubeTranscriptApi
+            
+                    # New way (works with latest version)
+                    ytt_api = YouTubeTranscriptApi()
+                    fetched = ytt_api.fetch(video["video_id"])
+            
+                    # Build the full text from snippets
+                    full_text = " ".join([snippet.text for snippet in fetched])
+            
+                    words = full_text.split()
+                    if len(words) > 650:
+                        summary = " ".join(words[:380]) + "\n\n...\n\n" + " ".join(words[-180:])
+                    else:
+                        summary = full_text
+            
+                    st.write(summary)
+            
+                except Exception as e:
+                    st.warning("Summary not available for this video.")
+                    st.caption(str(e)[:200])
                     
