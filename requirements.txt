@@ -9,3 +9,4 @@ fear-greed
 extra-streamlit-components
 feedparser
 youtube-transcript-api
+youtube-transcript-api>=1.0.0
