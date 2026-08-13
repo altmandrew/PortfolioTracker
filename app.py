@@ -923,21 +923,25 @@ elif page == "📰 News":
                 st.caption(f"Published: {video['published']}")
 
                 with st.expander("🧠 AI Summary", expanded=False):
-                    try:
-                        from youtube_transcript_api import YouTubeTranscriptApi
-                        transcript = YouTubeTranscriptApi.get_transcript(video["video_id"])
-                        full_text = " ".join([t["text"] for t in transcript])
+ try:
+        from youtube_transcript_api import YouTubeTranscriptApi
 
-                        words = full_text.split()
-                        if len(words) > 650:
-                            summary = " ".join(words[:380]) + "\n\n...\n\n" + " ".join(words[-180:])
-                        else:
-                            summary = full_text
+        # New way (works with latest version)
+        ytt_api = YouTubeTranscriptApi()
+        fetched = ytt_api.fetch(video["video_id"])
 
-                        st.write(summary)
-                    except Exception as e:
-                        st.warning("Summary not available.")
-                        st.caption(str(e)[:180])
+        # Build the full text from snippets
+        full_text = " ".join([snippet.text for snippet in fetched])
 
-            st.markdown("---")
+        words = full_text.split()
+        if len(words) > 650:
+            summary = " ".join(words[:380]) + "\n\n...\n\n" + " ".join(words[-180:])
+        else:
+            summary = full_text
+
+        st.write(summary)
+
+    except Exception as e:
+        st.warning("Summary not available for this video.")
+        st.caption(str(e)[:200])
                     
