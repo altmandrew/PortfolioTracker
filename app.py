@@ -850,7 +850,7 @@ elif page == "📰 News":
     YOUTUBE_API_KEY = st.secrets.get("youtube", {}).get("api_key")
 
     if not YOUTUBE_API_KEY:
-        st.error("YouTube API key missing in secrets.")
+        st.error("YouTube API key is missing in secrets.")
         st.stop()
 
     CHANNELS = {
@@ -870,9 +870,7 @@ elif page == "📰 News":
 
     @st.cache_data(ttl=1800)
     def get_recent_videos(channel_id: str, max_results: int = 3):
-        # Convert channel ID to uploads playlist ID (UC → UU)
         uploads_playlist_id = "UU" + channel_id[2:]
-
         url = "https://www.googleapis.com/youtube/v3/playlistItems"
         params = {
             "key": YOUTUBE_API_KEY,
@@ -880,14 +878,11 @@ elif page == "📰 News":
             "part": "snippet",
             "maxResults": max_results
         }
-
         try:
             response = requests.get(url, params=params, timeout=15)
             data = response.json()
-
             if "error" in data:
                 return []
-
             videos = []
             for item in data.get("items", []):
                 snippet = item["snippet"]
@@ -905,11 +900,10 @@ elif page == "📰 News":
 
     for channel_name, config in CHANNELS.items():
         st.subheader(channel_name)
-
         videos = get_recent_videos(config["channel_id"], config["count"])
 
         if not videos:
-            st.info(f"Could not load videos for {channel_name} right now.")
+            st.info(f"Could not load videos for {channel_name}.")
             continue
 
         for video in videos:
@@ -923,25 +917,21 @@ elif page == "📰 News":
                 st.caption(f"Published: {video['published']}")
 
                 with st.expander("🧠 AI Summary", expanded=False):
-                  try:
-                    from youtube_transcript_api import YouTubeTranscriptApi
-            
-                    # New way (works with latest version)
-                    ytt_api = YouTubeTranscriptApi()
-                    fetched = ytt_api.fetch(video["video_id"])
-            
-                    # Build the full text from snippets
-                    full_text = " ".join([snippet.text for snippet in fetched])
-            
-                    words = full_text.split()
-                    if len(words) > 650:
-                        summary = " ".join(words[:380]) + "\n\n...\n\n" + " ".join(words[-180:])
-                    else:
-                        summary = full_text
-            
-                    st.write(summary)
-            
-                except Exception as e:
-                    st.warning("Summary not available for this video.")
-                    st.caption(str(e)[:200])
+                    try:
+                        from youtube_transcript_api import YouTubeTranscriptApi
+                        ytt_api = YouTubeTranscriptApi()
+                        fetched = ytt_api.fetch(video["video_id"])
+                        full_text = " ".join([snippet.text for snippet in fetched])
+
+                        words = full_text.split()
+                        if len(words) > 650:
+                            summary = " ".join(words[:380]) + "\n\n...\n\n" + " ".join(words[-180:])
+                        else:
+                            summary = full_text
+                        st.write(summary)
+                    except Exception as e:
+                        st.warning("Summary not available for this video.")
+                        st.caption(str(e)[:200])
+
+            st.markdown("---")
                     
