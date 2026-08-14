@@ -518,8 +518,8 @@ for i, tf in enumerate(timeframes):
         xaxis=dict(fixedrange=True),
         yaxis=dict(fixedrange=True),
         dragmode=False
-        )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     
     
     # Analysis + Outlook + Projection sections remain the same as before
