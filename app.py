@@ -475,9 +475,6 @@ if page == "🏠 Home":
     
         # Historical Performance Chart
     st.subheader("Portfolio Performance")
-    
-    # Initialize selected timeframe in session state
-    st.subheader("Portfolio Performance (History)")
 
 if "hist_timeframe" not in st.session_state:
     st.session_state.hist_timeframe = "1M"
@@ -501,7 +498,7 @@ for i, tf in enumerate(timeframes):
         st.session_state.hist_timeframe = tf
         st.rerun()
 
-timeframe = st.session_state.hist_timeframe
+    timeframe = st.session_state.hist_timeframe
     
     # Chart
         fig = go.Figure()
