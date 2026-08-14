@@ -477,39 +477,31 @@ if page == "🏠 Home":
     st.subheader("Portfolio Performance")
     
     # Initialize selected timeframe in session state
-    if "hist_timeframe" not in st.session_state:
-        st.session_state.hist_timeframe = "1M"
-    
-    # Button row
-    cols = st.columns(6)
-    timeframes = ["1W", "1M", "6M", "YTD", "1Y", "Lifetime"]
-    
-    for i, tf in enumerate(timeframes):
-        if cols[i].button(tf, key=f"tf_{tf}", use_container_width=True,
-                          type="primary" if st.session_state.hist_timeframe == tf else "secondary"):
-            st.session_state.hist_timeframe = tf
-            st.rerun()
-    
-    timeframe = st.session_state.hist_timeframe
-    
-    # Filter data based on selected timeframe
-    hist_df["Date"] = pd.to_datetime(hist_df["Date"])
-    now = datetime.now()
-    
-    if timeframe == "1W":
-        start_date = now - timedelta(days=7)
-    elif timeframe == "1M":
-        start_date = now - timedelta(days=30)
-    elif timeframe == "6M":
-        start_date = now - timedelta(days=180)
-    elif timeframe == "YTD":
-        start_date = datetime(now.year, 1, 1)
-    elif timeframe == "1Y":
-        start_date = now - timedelta(days=365)
-    else:  # Lifetime
-        start_date = hist_df["Date"].min()
-    
-    filtered_hist = hist_df[hist_df["Date"] >= start_date]
+    st.subheader("Portfolio Performance (History)")
+
+if "hist_timeframe" not in st.session_state:
+    st.session_state.hist_timeframe = "1M"
+
+timeframes = ["1W", "1M", "6M", "YTD", "1Y", "Lifetime"]
+
+# Build a single line of text links
+link_parts = []
+for tf in timeframes:
+    if st.session_state.hist_timeframe == tf:
+        link_parts.append(f"**{tf}**")
+    else:
+        link_parts.append(tf)
+
+st.markdown(" | ".join(link_parts))
+
+# Actual clickable buttons (very small)
+cols = st.columns(len(timeframes))
+for i, tf in enumerate(timeframes):
+    if cols[i].button(tf, key=f"tf_btn_{tf}", use_container_width=True):
+        st.session_state.hist_timeframe = tf
+        st.rerun()
+
+timeframe = st.session_state.hist_timeframe
     
     # Chart
     fig = go.Figure()
