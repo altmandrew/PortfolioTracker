@@ -504,25 +504,25 @@ for i, tf in enumerate(timeframes):
 timeframe = st.session_state.hist_timeframe
     
     # Chart
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=filtered_hist["Date"],
-        y=filtered_hist["Value"],
-        mode="lines+markers",
-        line=dict(color="#00d1b2", width=3),
-        fill="tozeroy",
-        name="Total Value"
-    ))
-    fig.update_layout(
-        template="plotly_dark",
-        height=350,
-        margin=dict(l=0, r=0, t=20, b=0),
-        yaxis_title="Portfolio Value ($)",
-        xaxis=dict(fixedrange=True),
-        yaxis=dict(fixedrange=True),
-        dragmode=False
-    )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=filtered_hist["Date"],
+            y=filtered_hist["Value"],
+            mode="lines+markers",
+            line=dict(color="#00d1b2", width=3),
+            fill="tozeroy",
+            name="Total Value"
+        ))
+        fig.update_layout(
+            template="plotly_dark",
+            height=350,
+            margin=dict(l=0, r=0, t=20, b=0),
+            yaxis_title="Portfolio Value ($)",
+            xaxis=dict(fixedrange=True),
+            yaxis=dict(fixedrange=True),
+            dragmode=False
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     
     
     # Analysis + Outlook + Projection sections remain the same as before
