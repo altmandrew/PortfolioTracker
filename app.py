@@ -831,7 +831,7 @@ for i, tf in enumerate(timeframes):
         st.caption("Assumption: Contributions at end of each year. Returns compounded annually.")
     else:
         st.info("Adjust the sliders above, then click **Run Projection**.")
-        )
+        ]
 
 
 elif page == "📰 News":
