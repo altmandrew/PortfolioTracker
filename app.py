@@ -501,14 +501,14 @@ for i, tf in enumerate(timeframes):
     timeframe = st.session_state.hist_timeframe
     
     # Chart
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=filtered_hist["Date"],
-            y=filtered_hist["Value"],
-            mode="lines+markers",
-            line=dict(color="#00d1b2", width=3),
-            fill="tozeroy",
-            name="Total Value"
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=filtered_hist["Date"],
+        y=filtered_hist["Value"],
+        mode="lines+markers",
+        line=dict(color="#00d1b2", width=3),
+        fill="tozeroy",
+        name="Total Value"
         ))
         fig.update_layout(
             template="plotly_dark",
