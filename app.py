@@ -510,14 +510,14 @@ for i, tf in enumerate(timeframes):
         fill="tozeroy",
         name="Total Value"
         ))
-        fig.update_layout(
-            template="plotly_dark",
-            height=350,
-            margin=dict(l=0, r=0, t=20, b=0),
-            yaxis_title="Portfolio Value ($)",
-            xaxis=dict(fixedrange=True),
-            yaxis=dict(fixedrange=True),
-            dragmode=False
+    fig.update_layout(
+        template="plotly_dark",
+        height=350,
+        margin=dict(l=0, r=0, t=20, b=0),
+        yaxis_title="Portfolio Value ($)",
+        xaxis=dict(fixedrange=True),
+        yaxis=dict(fixedrange=True),
+        dragmode=False
         )
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     
@@ -527,7 +527,7 @@ for i, tf in enumerate(timeframes):
     # ------------------ HOLDINGS TABLE ------------------
     st.subheader("Current Positions")
     
-    if not holdings.empty:
+    if not holdings.empty
         display_df = holdings[[
             "Symbol", "Type", "Quantity", "Average Cost",
             "Price", "Market Value", "Weight (%)", "P&L ($)"
