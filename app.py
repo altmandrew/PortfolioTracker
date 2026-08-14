@@ -527,7 +527,7 @@ for i, tf in enumerate(timeframes):
     # ------------------ HOLDINGS TABLE ------------------
     st.subheader("Current Positions")
     
-    if not holdings.empty
+    if not holdings.empty:
         display_df = holdings[[
             "Symbol", "Type", "Quantity", "Average Cost",
             "Price", "Market Value", "Weight (%)", "P&L ($)"
