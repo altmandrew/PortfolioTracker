@@ -475,30 +475,41 @@ if page == "🏠 Home":
     
         # Historical Performance Chart
     st.subheader("Portfolio Performance")
-
-if "hist_timeframe" not in st.session_state:
-    st.session_state.hist_timeframe = "1M"
-
-timeframes = ["1W", "1M", "6M", "YTD", "1Y", "Lifetime"]
-
-# Build a single line of text links
-link_parts = []
-for tf in timeframes:
-    if st.session_state.hist_timeframe == tf:
-        link_parts.append(f"**{tf}**")
-    else:
-        link_parts.append(tf)
-
-st.markdown(" | ".join(link_parts))
-
-# Actual clickable buttons (very small)
-cols = st.columns(len(timeframes))
-for i, tf in enumerate(timeframes):
-    if cols[i].button(tf, key=f"tf_btn_{tf}", use_container_width=True):
-        st.session_state.hist_timeframe = tf
-        st.rerun()
-
+    
+    # Initialize selected timeframe in session state
+    if "hist_timeframe" not in st.session_state:
+        st.session_state.hist_timeframe = "1M"
+    
+    # Button row
+    cols = st.columns(6)
+    timeframes = ["1W", "1M", "6M", "YTD", "1Y", "Lifetime"]
+    
+    for i, tf in enumerate(timeframes):
+        if cols[i].button(tf, key=f"tf_{tf}", use_container_width=True,
+                          type="primary" if st.session_state.hist_timeframe == tf else "secondary"):
+            st.session_state.hist_timeframe = tf
+            st.rerun()
+    
     timeframe = st.session_state.hist_timeframe
+    
+    # Filter data based on selected timeframe
+    hist_df["Date"] = pd.to_datetime(hist_df["Date"])
+    now = datetime.now()
+    
+    if timeframe == "1W":
+        start_date = now - timedelta(days=7)
+    elif timeframe == "1M":
+        start_date = now - timedelta(days=30)
+    elif timeframe == "6M":
+        start_date = now - timedelta(days=180)
+    elif timeframe == "YTD":
+        start_date = datetime(now.year, 1, 1)
+    elif timeframe == "1Y":
+        start_date = now - timedelta(days=365)
+    else:  # Lifetime
+        start_date = hist_df["Date"].min()
+    
+    filtered_hist = hist_df[hist_df["Date"] >= start_date]
     
     # Chart
     fig = go.Figure()
@@ -509,7 +520,7 @@ for i, tf in enumerate(timeframes):
         line=dict(color="#00d1b2", width=3),
         fill="tozeroy",
         name="Total Value"
-        ))
+    ))
     fig.update_layout(
         template="plotly_dark",
         height=350,
@@ -831,6 +842,99 @@ for i, tf in enumerate(timeframes):
         st.caption("Assumption: Contributions at end of each year. Returns compounded annually.")
     else:
         st.info("Adjust the sliders above, then click **Run Projection**.")
+
+
+elif page == "📰 News":
+    st.title("📰 Market News")
+
+    YOUTUBE_API_KEY = st.secrets.get("youtube", {}).get("api_key")
+
+    if not YOUTUBE_API_KEY:
+        st.error("YouTube API key is missing in secrets.")
+        st.stop()
+
+    CHANNELS = {
+        "Meet Kevin": {
+            "channel_id": "UCUvvj5lwue7PspotMDjk5UA",
+            "count": 3
+        },
+        "Bravos Research": {
+            "channel_id": "UCOHxDwCcOzBaLkeTazanwcw",
+            "count": 2
+        },
+        "FX Evolution": {
+            "channel_id": "UCvJZEG5x-DVYZKTz--pS39w",
+            "count": 1
+        }
+    }
+
+    @st.cache_data(ttl=1800)
+    def get_recent_videos(channel_id: str, max_results: int = 3):
+        uploads_playlist_id = "UU" + channel_id[2:]
+        url = "https://www.googleapis.com/youtube/v3/playlistItems"
+        params = {
+            "key": YOUTUBE_API_KEY,
+            "playlistId": uploads_playlist_id,
+            "part": "snippet",
+            "maxResults": max_results
+        }
+        try:
+            response = requests.get(url, params=params, timeout=15)
+            data = response.json()
+            if "error" in data:
+                return []
+            videos = []
+            for item in data.get("items", []):
+                snippet = item["snippet"]
+                video_id = snippet["resourceId"]["videoId"]
+                videos.append({
+                    "title": snippet["title"],
+                    "link": f"https://www.youtube.com/watch?v={video_id}",
+                    "published": snippet["publishedAt"][:10],
+                    "video_id": video_id,
+                    "thumbnail": snippet["thumbnails"]["medium"]["url"]
+                })
+            return videos
+        except Exception:
+            return []
+
+    for channel_name, config in CHANNELS.items():
+        st.subheader(channel_name)
+        videos = get_recent_videos(config["channel_id"], config["count"])
+
+        if not videos:
+            st.info(f"Could not load videos for {channel_name}.")
+            continue
+
+        for video in videos:
+            col1, col2 = st.columns([1, 3])
+
+            with col1:
+                st.image(video["thumbnail"], use_container_width=True)
+
+            with col2:
+                st.markdown(f"### [{video['title']}]({video['link']})")
+                st.caption(f"Published: {video['published']}")
+
+                with st.expander("🧠 AI Summary", expanded=False):
+                    try:
+                        from youtube_transcript_api import YouTubeTranscriptApi
+                        ytt_api = YouTubeTranscriptApi()
+                        fetched = ytt_api.fetch(video["video_id"])
+                        full_text = " ".join([snippet.text for snippet in fetched])
+
+                        words = full_text.split()
+                        if len(words) > 650:
+                            summary = " ".join(words[:380]) + "\n\n...\n\n" + " ".join(words[-180:])
+                        else:
+                            summary = full_text
+                        st.write(summary)
+                    except Exception as e:
+                        st.warning("Summary not available for this video.")
+                        st.caption(str(e)[:200])
+
+            st.markdown("---")
+                    
 
   
                     
