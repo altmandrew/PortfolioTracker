@@ -658,7 +658,7 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
             st.success(f"Added {sym} ({position_label} {a_type})")
             st.rerun()
 
-with st.sidebar.expander("📜 Upload Transactions CSV", expanded=True):
+with st.sidebar.expander("➕Upload Transactions CSV", expanded=True):
     st.caption("Upload a transactions export (Buy/Sell/Buy to Open etc.). Positions will be updated automatically.")
     file_tx = st.file_uploader("Transactions CSV", type=["csv"], key="tx_uploader")
     
