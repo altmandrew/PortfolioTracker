@@ -549,7 +549,7 @@ if st.sidebar.button("Reset My Data", type="secondary"):
 
 if page == "Home":
     # --- MAIN DASHBOARD ---
-    st.title("ð Portfolio Pulse")
+    st.title("📈Portfolio Pulse")
     
     holdings = load_holdings()
     total_value = 0.0
@@ -670,7 +670,7 @@ if page == "Home":
     # CNN FEAR & GREED INDEX (Last 30 Days)
     # ============================================================
     st.divider()
-    st.subheader("ð± CNN Fear & Greed Index â Last 90 Days")
+    st.subheader("CNN Fear & Greed Index Last 90 Days")
     
     @st.cache_data(ttl=3600)
     def get_cnn_fear_greed_30d():
@@ -749,7 +749,7 @@ if page == "Home":
     # CURRENT PORTFOLIO ANALYSIS
     # ============================================================
     st.divider()
-    st.header("ð Current Portfolio Analysis")
+    st.header("Portfolio Analysis")
     
     if holdings.empty:
         st.info("Add holdings to see portfolio analysis.")
@@ -810,7 +810,7 @@ if page == "Home":
     # OUTLOOK SUGGESTIONS
     # ============================================================
     st.divider()
-    st.header("ð¯ Suggested Portfolio Changes by Market Outlook")
+    st.header("Suggested Portfolio Changes by Market Outlook")
     
     outlook = st.selectbox("Select Market Outlook", ["Bullish", "Neutral", "Bearish"])
     
@@ -883,7 +883,7 @@ if page == "Home":
     # PROJECTION CALCULATOR (with Run button)
     # ============================================================
     st.divider()
-    st.header("ð® Portfolio Projection Calculator")
+    st.header("Portfolio Projection Calculator")
     
     with st.form("projection_form"):
         col1, col2, col3 = st.columns(3)
@@ -901,7 +901,7 @@ if page == "Home":
                 "Time Horizon (Years)", 1, 50, 20
             )
     
-        run_projection = st.form_submit_button("â¶ Run Projection", type="primary")
+        run_projection = st.form_submit_button("Run Projection", type="primary")
     
     if run_projection:
         start_value = total_value if total_value > 0 else 0
@@ -951,8 +951,8 @@ if page == "Home":
         st.info("Adjust the sliders above, then click **Run Projection**.")
 
 
-elif page == "ð° News":
-    st.title("ð° Market News")
+elif page == "News":
+    st.title("Market News")
 
     YOUTUBE_API_KEY = st.secrets.get("youtube", {}).get("api_key")
 
