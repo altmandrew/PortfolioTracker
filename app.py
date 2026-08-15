@@ -382,13 +382,18 @@ def merge_holdings(existing, new):
 st.sidebar.header("ð¥ Portfolio Management")
 
 with st.sidebar.expander("➕ Add Asset", expanded=False):
-    with st.form("add_asset"):
-        a_type = st.selectbox("Asset Type", ["Stock", "ETF", "Option", "Cash"])
+    # 1. Asset Type selector MUST be outside the form
+    a_type = st.selectbox(
+        "Asset Type",
+        ["Stock", "ETF", "Option", "Cash"],
+        key="add_asset_type"
+    )
 
-        # ---------- Option-specific fields ----------
+    with st.form("add_asset_form"):
+        # ---------- OPTION ----------
         if a_type == "Option":
             st.caption("Enter underlying + expiration + strike. OCC symbol is built automatically.")
-            
+
             underlying = st.text_input(
                 "Underlying Symbol (e.g. AAPL, TQQQ, SPY)",
                 value=""
@@ -418,7 +423,10 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
             strike_int = int(round(strike * 1000))
             strike_str = f"{strike_int:08d}"
             cp_letter = "C" if cp == "Call" else "P"
-            preview_occ = f"{underlying}{yy}{mm}{dd}{cp_letter}{strike_str}" if underlying else "(enter underlying)"
+            preview_occ = (
+                f"{underlying}{yy}{mm}{dd}{cp_letter}{strike_str}"
+                if underlying else "(enter underlying)"
+            )
             st.code(f"OCC Symbol → {preview_occ}", language=None)
 
             qty = st.number_input(
@@ -434,20 +442,20 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
                 value=0.0,
                 step=0.01,
                 format="%.4f",
-                help="Premium paid (or received) per contract"
+                help="Premium paid (Bought) or received (Sold) per contract"
             )
 
-        # ---------- Cash ----------
+        # ---------- CASH ----------
         elif a_type == "Cash":
             st.caption("Quantity = dollar amount")
-            sym = "CASH"
             qty = st.number_input("Amount ($)", min_value=0.0, step=100.0, value=0.0)
             cost = 1.0
+            underlying = None  # not used
 
-        # ---------- Stock / ETF ----------
+        # ---------- STOCK / ETF ----------
         else:
             sym = st.text_input("Symbol", value="").upper().strip()
-            qty = st.number_input("Quantity", min_value=0.0, step=1.0, value=0.0)
+            qty = st.number_input("Quantity (shares)", min_value=0.0, step=1.0, value=0.0)
             cost = st.number_input(
                 "Avg Cost (per share)",
                 min_value=0.0,
@@ -456,14 +464,16 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
                 format="%.4f"
             )
 
-        # ---------- Submit ----------
-        if st.form_submit_button("Add to Portfolio", type="primary"):
+        # ---------- SUBMIT ----------
+        submitted = st.form_submit_button("Add to Portfolio", type="primary")
+
+        if submitted:
             if a_type == "Option":
                 if not underlying:
                     st.error("Underlying symbol is required")
                     st.stop()
 
-                # Build OCC symbol
+                # Build proper OCC symbol
                 yy = f"{exp_date.year % 100:02d}"
                 mm = f"{exp_date.month:02d}"
                 dd = f"{exp_date.day:02d}"
@@ -472,7 +482,7 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
                 cp_letter = "C" if cp == "Call" else "P"
                 sym = f"{underlying}{yy}{mm}{dd}{cp_letter}{strike_str}"
 
-                # Make quantity negative for short options
+                # Negative quantity for short options
                 if position == "Sold (Short)":
                     qty = -abs(qty)
                 else:
@@ -482,15 +492,16 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
                 sym = "CASH"
                 cost = 1.0
 
-            elif not sym:
-                st.error("Symbol is required")
-                st.stop()
+            else:  # Stock or ETF
+                if not sym:
+                    st.error("Symbol is required")
+                    st.stop()
 
-            # Safety: never allow zero quantity
             if qty == 0:
                 st.error("Quantity cannot be zero")
                 st.stop()
 
+            # Save
             df = load_holdings()
             new_row = pd.DataFrame([{
                 "Symbol": sym,
@@ -498,9 +509,10 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
                 "Quantity": qty,
                 "Average Cost": cost
             }])
-
             save_holdings(merge_holdings(df, new_row))
-            st.success(f"Added {sym} ({'Short' if qty < 0 else 'Long'} {a_type})")
+
+            position_label = "Short" if qty < 0 else "Long"
+            st.success(f"Added {sym} ({position_label} {a_type})")
             st.rerun()
 
 with st.sidebar.expander("ð Upload Brokerage CSV", expanded=True):
