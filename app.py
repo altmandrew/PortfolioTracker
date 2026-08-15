@@ -64,7 +64,7 @@ def check_login():
             return True
 
     # Show login form
-    st.title("🔒 Portfolio Pulse – Login")
+    st.title("ð Portfolio Pulse â Login")
     st.write("Please enter your email and password.")
 
     with st.form("Login"):
@@ -112,7 +112,7 @@ with st.sidebar:
 # -------------------- END LOGIN --------------------
 
 # -------------------- PAGE NAVIGATION --------------------
-page = st.sidebar.radio("Navigation", ["🏠 Home", "📰 News"], index=0)
+page = st.sidebar.radio("Navigation", ["ð  Home", "ð° News"], index=0)
 st.sidebar.markdown("---")
 
 # -------------------- GOOGLE SHEETS HELPERS --------------------
@@ -379,9 +379,9 @@ def merge_holdings(existing, new):
 
 
 # --- SIDEBAR ---
-st.sidebar.header("📥 Portfolio Management")
+st.sidebar.header("ð¥ Portfolio Management")
 
-with st.sidebar.expander("➕ Add Asset", expanded=False):
+with st.sidebar.expander("â Add Asset", expanded=False):
     with st.form("add_asset"):
         a_type = st.selectbox("Asset Type", ["Stock", "ETF", "Option", "Cash"])
         default_sym = "CASH" if a_type == "Cash" else ""
@@ -389,30 +389,73 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
         if a_type == "Cash":
             st.caption("Quantity = dollar amount")
 
-        sym = st.text_input("Symbol", value=default_sym).upper().strip()
+        # ---- Option-specific fields ----
+        if a_type == "Option":
+            st.caption("Enter the underlying + expiration + strike. OCC symbol is built automatically.")
+            underlying = st.text_input("Underlying Symbol (e.g. AAPL, TQQQ)", value="").upper().strip()
+            exp_date = st.date_input(
+                "Expiration Date",
+                value=datetime.now().date() + timedelta(days=30),
+                min_value=datetime.now().date()
+            )
+            strike = st.number_input("Strike Price", min_value=0.01, value=100.0, step=0.5, format="%.2f")
+            cp = st.selectbox("Call / Put", ["Call", "Put"])
+            # Preview the OCC symbol that will be stored
+            yy = f"{exp_date.year % 100:02d}"
+            mm = f"{exp_date.month:02d}"
+            dd = f"{exp_date.day:02d}"
+            strike_int = int(round(strike * 1000))
+            strike_str = f"{strike_int:08d}"
+            cp_letter = "C" if cp == "Call" else "P"
+            preview_occ = f"{underlying}{yy}{mm}{dd}{cp_letter}{strike_str}" if underlying else "(enter underlying)"
+            st.code(f"OCC Symbol â {preview_occ}", language=None)
+            sym = underlying  # temporary; real OCC built on submit
+        else:
+            sym = st.text_input("Symbol", value=default_sym).upper().strip()
+
         qty = st.number_input("Quantity", min_value=0.0, step=1.0, value=0.0)
-        cost = st.number_input("Avg Cost", min_value=0.0, value=default_cost)
+        cost = st.number_input(
+            "Avg Cost (per share / per contract for options)",
+            min_value=0.0,
+            value=default_cost
+        )
 
         if st.form_submit_button("Add to Portfolio"):
-            if a_type != "Cash" and not sym:
+            if a_type == "Cash":
+                sym = "CASH"
+                cost = 1.0
+            elif a_type == "Option":
+                if not underlying:
+                    st.error("Underlying symbol is required")
+                    st.stop()
+                # Build proper OCC symbol from the selected date + strike + C/P
+                yy = f"{exp_date.year % 100:02d}"
+                mm = f"{exp_date.month:02d}"
+                dd = f"{exp_date.day:02d}"
+                strike_int = int(round(strike * 1000))
+                strike_str = f"{strike_int:08d}"
+                cp_letter = "C" if cp == "Call" else "P"
+                sym = f"{underlying}{yy}{mm}{dd}{cp_letter}{strike_str}"
+            elif not sym:
                 st.error("Symbol required")
-            else:
-                if a_type == "Cash":
-                    sym = "CASH"
-                    cost = 1.0
-                if a_type == "Option":
-                    sym = convert_option_to_occ(sym)
-                df = load_holdings()
-                new_row = pd.DataFrame([{"Symbol": sym, "Type": a_type, "Quantity": qty, "Average Cost": cost}])
-                save_holdings(merge_holdings(df, new_row))
-                st.success(f"Added {sym}")
-                st.rerun()
+                st.stop()
 
-with st.sidebar.expander("📂 Upload Brokerage CSV", expanded=True):
+            df = load_holdings()
+            new_row = pd.DataFrame([{
+                "Symbol": sym,
+                "Type": a_type,
+                "Quantity": qty,
+                "Average Cost": cost
+            }])
+            save_holdings(merge_holdings(df, new_row))
+            st.success(f"Added {sym}")
+            st.rerun()
+
+with st.sidebar.expander("ð Upload Brokerage CSV", expanded=True):
     file = st.file_uploader("Upload CSV", type=["csv"])
     if file is not None:
         st.write(f"Selected: **{file.name}**")
-        if st.button("🚀 Import & Add to Portfolio", type="primary", use_container_width=True):
+        if st.button("ð Import & Add to Portfolio", type="primary", use_container_width=True):
             try:
                 df_new = import_brokerage_csv(file)
                 existing = load_holdings()
@@ -427,7 +470,7 @@ with st.sidebar.expander("📂 Upload Brokerage CSV", expanded=True):
 
 holdings_preview = load_holdings()
 if not holdings_preview.empty:
-    with st.sidebar.expander("🗑️ Delete Holding"):
+    with st.sidebar.expander("ðï¸ Delete Holding"):
         to_delete = st.selectbox("Select symbol", holdings_preview["Symbol"].tolist())
         if st.button("Delete selected", type="primary"):
             holdings_preview = holdings_preview[holdings_preview["Symbol"] != to_delete]
@@ -435,14 +478,14 @@ if not holdings_preview.empty:
             st.success(f"Deleted {to_delete}")
             st.rerun()
 
-if st.sidebar.button("🗑️ Reset My Data", type="secondary"):
+if st.sidebar.button("ðï¸ Reset My Data", type="secondary"):
     save_holdings(pd.DataFrame(columns=["Symbol", "Type", "Quantity", "Average Cost"]))
     st.success("Your data has been reset")
     st.rerun()
 
-if page == "🏠 Home":
+if page == "ð  Home":
     # --- MAIN DASHBOARD ---
-    st.title("📈 Portfolio Pulse")
+    st.title("ð Portfolio Pulse")
     
     holdings = load_holdings()
     total_value = 0.0
@@ -563,7 +606,7 @@ if page == "🏠 Home":
     # CNN FEAR & GREED INDEX (Last 30 Days)
     # ============================================================
     st.divider()
-    st.subheader("😱 CNN Fear & Greed Index – Last 90 Days")
+    st.subheader("ð± CNN Fear & Greed Index â Last 90 Days")
     
     @st.cache_data(ttl=3600)
     def get_cnn_fear_greed_30d():
@@ -642,7 +685,7 @@ if page == "🏠 Home":
     # CURRENT PORTFOLIO ANALYSIS
     # ============================================================
     st.divider()
-    st.header("🔍 Current Portfolio Analysis")
+    st.header("ð Current Portfolio Analysis")
     
     if holdings.empty:
         st.info("Add holdings to see portfolio analysis.")
@@ -690,10 +733,10 @@ if page == "🏠 Home":
             st.metric("Best Suited Market", best_market)
         with col2:
             st.markdown("**Current Allocation**")
-            st.write(f"• Equity / Other: **{equity_pct:.1f}%**")
-            st.write(f"• Options: **{option_pct:.1f}%**")
-            st.write(f"• Bonds: **{bond_pct:.1f}%**")
-            st.write(f"• Cash: **{cash_pct:.1f}%**")
+            st.write(f"â¢ Equity / Other: **{equity_pct:.1f}%**")
+            st.write(f"â¢ Options: **{option_pct:.1f}%**")
+            st.write(f"â¢ Bonds: **{bond_pct:.1f}%**")
+            st.write(f"â¢ Cash: **{cash_pct:.1f}%**")
     
         st.markdown(f"**Analysis:** {description}")
         st.markdown(f"**Key Risk:** {risks}")
@@ -703,7 +746,7 @@ if page == "🏠 Home":
     # OUTLOOK SUGGESTIONS
     # ============================================================
     st.divider()
-    st.header("🎯 Suggested Portfolio Changes by Market Outlook")
+    st.header("ð¯ Suggested Portfolio Changes by Market Outlook")
     
     outlook = st.selectbox("Select Market Outlook", ["Bullish", "Neutral", "Bearish"])
     
@@ -721,7 +764,7 @@ if page == "🏠 Home":
     ) if not holdings.empty and total_value > 0 else 0
     
     if outlook == "Bullish":
-        st.subheader("📈 Bullish Recommendations")
+        st.subheader("ð Bullish Recommendations")
         st.success("Goal: Maximize upside participation.")
         suggestions = []
         if has_cash and cash_amount > 1000:
@@ -737,13 +780,13 @@ if page == "🏠 Home":
             st.markdown(f"{i}. {s}")
     
     elif outlook == "Neutral":
-        st.subheader("⚖️ Neutral Recommendations")
+        st.subheader("âï¸ Neutral Recommendations")
         st.info("Goal: Maintain balance and stay flexible.")
         suggestions = []
         if option_weight > 20:
             suggestions.append(f"**Trim Options**: Options are ~{option_weight:.1f}% of the portfolio. Consider taking partial profits.")
         if has_cash and cash_amount < total_value * 0.05:
-            suggestions.append("**Build a small cash buffer** (aim for 5–10%).")
+            suggestions.append("**Build a small cash buffer** (aim for 5â10%).")
         if has_bnd:
             suggestions.append("**Keep core bond allocation** for stability.")
         suggestions.append("**Rebalance** any position that has grown too large.")
@@ -751,14 +794,14 @@ if page == "🏠 Home":
             st.markdown(f"{i}. {s}")
     
     else:  # Bearish
-        st.subheader("📉 Bearish Recommendations")
+        st.subheader("ð Bearish Recommendations")
         st.warning("Goal: Preserve capital.")
         suggestions = []
         if has_tqqq_calls:
             suggestions.append("**Reduce or exit TQQQ Calls**: Leveraged long calls can lose significant value quickly in a sell-off. Strongly consider closing or heavily trimming these positions.")
     
         if has_cash and cash_amount < total_value * 0.15:
-            suggestions.append(f"**Increase Cash**: Raise cash to at least 15–25% of the portfolio (currently ~${cash_amount:,.0f}).")
+            suggestions.append(f"**Increase Cash**: Raise cash to at least 15â25% of the portfolio (currently ~${cash_amount:,.0f}).")
     
         if has_bnd and bond_weight < 25:
             suggestions.append(f"**Increase Bond Allocation**: BND is a defensive holding. Consider adding more (current weight ~{bond_weight:.1f}%).")
@@ -776,7 +819,7 @@ if page == "🏠 Home":
     # PROJECTION CALCULATOR (with Run button)
     # ============================================================
     st.divider()
-    st.header("🔮 Portfolio Projection Calculator")
+    st.header("ð® Portfolio Projection Calculator")
     
     with st.form("projection_form"):
         col1, col2, col3 = st.columns(3)
@@ -794,7 +837,7 @@ if page == "🏠 Home":
                 "Time Horizon (Years)", 1, 50, 20
             )
     
-        run_projection = st.form_submit_button("▶ Run Projection", type="primary")
+        run_projection = st.form_submit_button("â¶ Run Projection", type="primary")
     
     if run_projection:
         start_value = total_value if total_value > 0 else 0
@@ -844,8 +887,8 @@ if page == "🏠 Home":
         st.info("Adjust the sliders above, then click **Run Projection**.")
 
 
-elif page == "📰 News":
-    st.title("📰 Market News")
+elif page == "ð° News":
+    st.title("ð° Market News")
 
     YOUTUBE_API_KEY = st.secrets.get("youtube", {}).get("api_key")
 
@@ -916,7 +959,7 @@ elif page == "📰 News":
                 st.markdown(f"### [{video['title']}]({video['link']})")
                 st.caption(f"Published: {video['published']}")
 
-                with st.expander("🧠 AI Summary", expanded=False):
+                with st.expander("ð§  AI Summary", expanded=False):
                     try:
                         from youtube_transcript_api import YouTubeTranscriptApi
                         ytt_api = YouTubeTranscriptApi()
