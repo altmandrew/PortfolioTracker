@@ -382,7 +382,7 @@ def merge_holdings(existing, new):
 st.sidebar.header("📈Portfolio Management")
 
 with st.sidebar.expander("➕ Add Asset", expanded=False):
-    # 1. Asset Type selector MUST be outside the form
+    # Asset Type MUST be outside the form so the fields update immediately
     a_type = st.selectbox(
         "Asset Type",
         ["Stock", "ETF", "Option", "Cash"],
@@ -390,9 +390,9 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
     )
 
     with st.form("add_asset_form"):
-        # ---------- OPTION ----------
+        # ==================== OPTION ====================
         if a_type == "Option":
-            st.caption("Enter underlying + expiration + strike. OCC symbol is built automatically.")
+            st.caption("One option contract = 100 shares. Everything is calculated with ×100 automatically.")
 
             underlying = st.text_input(
                 "Underlying Symbol (e.g. AAPL, TQQQ, SPY)",
@@ -433,26 +433,30 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
                 "Quantity (number of contracts)",
                 min_value=0.0,
                 step=1.0,
-                value=1.0
+                value=1.0,
+                help="Enter 1 for one contract, 2 for two contracts, etc."
             )
 
+            # ★★★ CRITICAL: user enters premium PER SHARE ★★★
             cost = st.number_input(
-                "Transaction Price / Avg Cost (per contract)",
+                "Premium / Avg Cost  PER SHARE  (e.g. 1.25)",
                 min_value=0.0,
                 value=0.0,
                 step=0.01,
                 format="%.4f",
-                help="Premium paid (Bought) or received (Sold) per contract"
+                help="Enter the price per share, NOT the full contract cost. "
+                     "Example: if you paid $125 for one contract, enter 1.25"
             )
 
-        # ---------- CASH ----------
+            st.info("💡 Market Value & P&L will automatically be multiplied by 100 (contract size).")
+
+        # ==================== CASH ====================
         elif a_type == "Cash":
             st.caption("Quantity = dollar amount")
             qty = st.number_input("Amount ($)", min_value=0.0, step=100.0, value=0.0)
             cost = 1.0
-            underlying = None  # not used
 
-        # ---------- STOCK / ETF ----------
+        # ==================== STOCK / ETF ====================
         else:
             sym = st.text_input("Symbol", value="").upper().strip()
             qty = st.number_input("Quantity (shares)", min_value=0.0, step=1.0, value=0.0)
@@ -464,7 +468,7 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
                 format="%.4f"
             )
 
-        # ---------- SUBMIT ----------
+        # ==================== SUBMIT ====================
         submitted = st.form_submit_button("Add to Portfolio", type="primary")
 
         if submitted:
@@ -473,7 +477,7 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
                     st.error("Underlying symbol is required")
                     st.stop()
 
-                # Build proper OCC symbol
+                # Build OCC symbol
                 yy = f"{exp_date.year % 100:02d}"
                 mm = f"{exp_date.month:02d}"
                 dd = f"{exp_date.day:02d}"
@@ -488,11 +492,14 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
                 else:
                     qty = abs(qty)
 
+                # cost is already per share – do NOT multiply here
+                # The ×100 happens later in Market Value & P&L calculation
+
             elif a_type == "Cash":
                 sym = "CASH"
                 cost = 1.0
 
-            else:  # Stock or ETF
+            else:  # Stock / ETF
                 if not sym:
                     st.error("Symbol is required")
                     st.stop()
@@ -507,7 +514,7 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
                 "Symbol": sym,
                 "Type": a_type,
                 "Quantity": qty,
-                "Average Cost": cost
+                "Average Cost": cost          # stored PER SHARE for options
             }])
             save_holdings(merge_holdings(df, new_row))
 
