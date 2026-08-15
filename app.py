@@ -377,6 +377,142 @@ def merge_holdings(existing, new):
     merged["Average Cost"] = merged["Average Cost"].round(4)
     return merged
 
+def import_transactions_csv(uploaded_file):
+    """
+    Process a transactions CSV and return an updated holdings DataFrame.
+    Applies trades chronologically and maintains correct average cost.
+    """
+    content = uploaded_file.getvalue().decode("utf-8")
+    df = pd.read_csv(io.StringIO(content))
+
+    # Normalize column names
+    df.columns = [c.strip() for c in df.columns]
+
+    # Required columns check
+    required = ["Date", "Action", "Symbol", "Quantity", "Price"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing columns: {missing}")
+
+    # Clean helpers
+    def clean_number(val):
+        if pd.isna(val) or str(val).strip() in ["", "--", "nan"]:
+            return 0.0
+        s = str(val).replace("$", "").replace(",", "").replace("(", "-").replace(")", "").strip()
+        try:
+            return float(s)
+        except:
+            return 0.0
+
+    def clean_qty(val):
+        return clean_number(val)
+
+    # Parse dates and sort oldest first
+    df["Date"] = pd.to_datetime(df["Date"].astype(str).str.split(" as of ").str[0], errors="coerce")
+    df = df.dropna(subset=["Date"]).sort_values("Date").reset_index(drop=True)
+
+    # Start with current holdings
+    holdings = load_holdings().copy()
+    if holdings.empty:
+        holdings = pd.DataFrame(columns=["Symbol", "Type", "Quantity", "Average Cost"])
+
+    # Convert to a mutable dict for easy updates: key = (Symbol, Type)
+    pos = {}
+    for _, row in holdings.iterrows():
+        key = (row["Symbol"], row["Type"])
+        pos[key] = {
+            "Quantity": float(row["Quantity"]),
+            "Average Cost": float(row["Average Cost"]),
+            "Total Cost": float(row["Quantity"]) * float(row["Average Cost"])
+        }
+
+    for _, row in df.iterrows():
+        action = str(row["Action"]).strip().lower()
+        symbol_raw = str(row["Symbol"]).strip()
+        qty = clean_qty(row["Quantity"])
+        price = clean_number(row["Price"])
+        amount = clean_number(row.get("Amount", 0))
+
+        if not symbol_raw or symbol_raw.lower() in ["nan", "", "--"]:
+            # Cash / interest / dividend without symbol
+            if "interest" in action or "dividend" in action or "journal" in action:
+                # Optional: you can credit cash here if desired
+                continue
+            continue
+
+        # ---------- Determine Type & clean symbol ----------
+        if "option" in action or re.search(r"\d{1,2}/\d{1,2}/\d{2,4}.*[CP]", symbol_raw, re.I):
+            h_type = "Option"
+            symbol = convert_option_to_occ(symbol_raw)
+        elif symbol_raw.upper() in ["CASH", "USD"] or "cash" in action:
+            h_type = "Cash"
+            symbol = "CASH"
+        else:
+            # Heuristic for ETF vs Stock (you can improve later)
+            if any(x in symbol_raw.upper() for x in ["BND", "AGG", "TLT", "QQQ", "SPY", "TQQQ", "SQQQ"]):
+                h_type = "ETF"
+            else:
+                h_type = "Stock"
+            symbol = symbol_raw.upper()
+
+        key = (symbol, h_type)
+
+        # ---------- Apply the transaction ----------
+        is_buy = any(x in action for x in ["buy", "buy to open"])
+        is_sell = any(x in action for x in ["sell", "sell to close", "sell to open"])
+
+        # Special case: Sell to Open → short
+        is_short_open = "sell to open" in action
+        is_cover = "buy to close" in action
+
+        if is_buy or is_cover:
+            signed_qty = abs(qty)
+        elif is_sell or is_short_open:
+            signed_qty = -abs(qty)
+        else:
+            continue  # skip unknown actions
+
+        if key not in pos:
+            pos[key] = {"Quantity": 0.0, "Average Cost": 0.0, "Total Cost": 0.0}
+
+        current_qty = pos[key]["Quantity"]
+        current_total_cost = pos[key]["Total Cost"]
+
+        new_qty = current_qty + signed_qty
+
+        if signed_qty > 0:  # Buying / covering
+            # Weighted average cost
+            trade_cost = abs(signed_qty) * price
+            # For options price is already per share
+            new_total_cost = current_total_cost + trade_cost
+            new_avg = new_total_cost / new_qty if new_qty != 0 else 0.0
+        else:  # Selling / shorting
+            # Keep the existing average cost for remaining shares
+            new_avg = pos[key]["Average Cost"]
+            new_total_cost = new_avg * new_qty
+
+        # Clean up zero positions
+        if abs(new_qty) < 1e-8:
+            if key in pos:
+                del pos[key]
+        else:
+            pos[key] = {
+                "Quantity": new_qty,
+                "Average Cost": round(new_avg, 4),
+                "Total Cost": new_total_cost
+            }
+
+    # Convert back to DataFrame
+    records = []
+    for (sym, typ), data in pos.items():
+        records.append({
+            "Symbol": sym,
+            "Type": typ,
+            "Quantity": data["Quantity"],
+            "Average Cost": data["Average Cost"]
+        })
+
+    return pd.DataFrame(records)
 
 # --- SIDEBAR ---
 st.sidebar.header("📈Portfolio Management")
@@ -521,6 +657,23 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
             position_label = "Short" if qty < 0 else "Long"
             st.success(f"Added {sym} ({position_label} {a_type})")
             st.rerun()
+
+with st.sidebar.expander("📜 Upload Transactions CSV", expanded=True):
+    st.caption("Upload a transactions export (Buy/Sell/Buy to Open etc.). Positions will be updated automatically.")
+    file_tx = st.file_uploader("Transactions CSV", type=["csv"], key="tx_uploader")
+    
+    if file_tx is not None:
+        st.write(f"Selected: **{file_tx.name}**")
+        if st.button("🚀 Process Transactions & Update Holdings", type="primary", use_container_width=True):
+            try:
+                updated_holdings = import_transactions_csv(file_tx)
+                save_holdings(updated_holdings)
+                st.success(f"Successfully processed transactions. Holdings updated ({len(updated_holdings)} positions).")
+                st.balloons()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to process transactions: {e}")
+                st.exception(e)
 
 with st.sidebar.expander("➕Upload Brokerage CSV", expanded=False):
     file = st.file_uploader("Upload CSV", type=["csv"])
