@@ -64,7 +64,7 @@ def check_login():
             return True
 
     # Show login form
-    st.title("ð Portfolio Pulse â Login")
+    st.title("Portfolio Pulse Login")
     st.write("Please enter your email and password.")
 
     with st.form("Login"):
@@ -112,7 +112,7 @@ with st.sidebar:
 # -------------------- END LOGIN --------------------
 
 # -------------------- PAGE NAVIGATION --------------------
-page = st.sidebar.radio("Navigation", ["ð  Home", "ð° News"], index=0)
+page = st.sidebar.radio("Navigation", ["Home", "News"], index=0)
 st.sidebar.markdown("---")
 
 # -------------------- GOOGLE SHEETS HELPERS --------------------
@@ -379,7 +379,7 @@ def merge_holdings(existing, new):
 
 
 # --- SIDEBAR ---
-st.sidebar.header("ð¥ Portfolio Management")
+st.sidebar.header("📈Portfolio Management")
 
 with st.sidebar.expander("➕ Add Asset", expanded=False):
     # 1. Asset Type selector MUST be outside the form
@@ -515,7 +515,7 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
             st.success(f"Added {sym} ({position_label} {a_type})")
             st.rerun()
 
-with st.sidebar.expander("ð Upload Brokerage CSV", expanded=True):
+with st.sidebar.expander("➕Upload Brokerage CSV", expanded=False):
     file = st.file_uploader("Upload CSV", type=["csv"])
     if file is not None:
         st.write(f"Selected: **{file.name}**")
@@ -542,12 +542,12 @@ if not holdings_preview.empty:
             st.success(f"Deleted {to_delete}")
             st.rerun()
 
-if st.sidebar.button("ðï¸ Reset My Data", type="secondary"):
+if st.sidebar.button("Reset My Data", type="secondary"):
     save_holdings(pd.DataFrame(columns=["Symbol", "Type", "Quantity", "Average Cost"]))
     st.success("Your data has been reset")
     st.rerun()
 
-if page == "ð  Home":
+if page == "Home":
     # --- MAIN DASHBOARD ---
     st.title("ð Portfolio Pulse")
     
