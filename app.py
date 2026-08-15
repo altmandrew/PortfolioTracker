@@ -526,7 +526,7 @@ with st.sidebar.expander("➕Upload Brokerage CSV", expanded=False):
     file = st.file_uploader("Upload CSV", type=["csv"])
     if file is not None:
         st.write(f"Selected: **{file.name}**")
-        if st.button("ð Import & Add to Portfolio", type="primary", use_container_width=True):
+        if st.button("Import & Add to Portfolio", type="primary", use_container_width=True):
             try:
                 df_new = import_brokerage_csv(file)
                 existing = load_holdings()
@@ -541,7 +541,7 @@ with st.sidebar.expander("➕Upload Brokerage CSV", expanded=False):
 
 holdings_preview = load_holdings()
 if not holdings_preview.empty:
-    with st.sidebar.expander("ðï¸ Delete Holding"):
+    with st.sidebar.expander("Delete Holding"):
         to_delete = st.selectbox("Select symbol", holdings_preview["Symbol"].tolist())
         if st.button("Delete selected", type="primary"):
             holdings_preview = holdings_preview[holdings_preview["Symbol"] != to_delete]
@@ -835,7 +835,7 @@ if page == "Home":
     ) if not holdings.empty and total_value > 0 else 0
     
     if outlook == "Bullish":
-        st.subheader("ð Bullish Recommendations")
+        st.subheader("Bullish Recommendations")
         st.success("Goal: Maximize upside participation.")
         suggestions = []
         if has_cash and cash_amount > 1000:
@@ -851,7 +851,7 @@ if page == "Home":
             st.markdown(f"{i}. {s}")
     
     elif outlook == "Neutral":
-        st.subheader("âï¸ Neutral Recommendations")
+        st.subheader("Neutral Recommendations")
         st.info("Goal: Maintain balance and stay flexible.")
         suggestions = []
         if option_weight > 20:
@@ -865,7 +865,7 @@ if page == "Home":
             st.markdown(f"{i}. {s}")
     
     else:  # Bearish
-        st.subheader("ð Bearish Recommendations")
+        st.subheader("Bearish Recommendations")
         st.warning("Goal: Preserve capital.")
         suggestions = []
         if has_tqqq_calls:
@@ -1030,7 +1030,7 @@ elif page == "News":
                 st.markdown(f"### [{video['title']}]({video['link']})")
                 st.caption(f"Published: {video['published']}")
 
-                with st.expander("ð§  AI Summary", expanded=False):
+                with st.expander("AI Summary", expanded=False):
                     try:
                         from youtube_transcript_api import YouTubeTranscriptApi
                         ytt_api = YouTubeTranscriptApi()
