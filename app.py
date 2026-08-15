@@ -590,21 +590,17 @@ if page == "Home":
         # Historical Performance Chart
     st.subheader("Portfolio Performance")
     
-    # Initialize selected timeframe in session state
-    if "hist_timeframe" not in st.session_state:
-        st.session_state.hist_timeframe = "1M"
-    
-    # Button row
-    cols = st.columns(6)
-    timeframes = ["1W", "1M", "6M", "YTD", "1Y", "Lifetime"]
-    
-    for i, tf in enumerate(timeframes):
-        if cols[i].button(tf, key=f"tf_{tf}", use_container_width=True,
-                          type="primary" if st.session_state.hist_timeframe == tf else "secondary"):
-            st.session_state.hist_timeframe = tf
-            st.rerun()
-    
-    timeframe = st.session_state.hist_timeframe
+    # Clean text-style timeframe selector
+timeframes = ["1W", "1M", "6M", "YTD", "1Y", "Lifetime"]
+
+timeframe = st.radio(
+    "Timeframe",
+    timeframes,
+    horizontal=True,
+    label_visibility="collapsed",
+    key="hist_timeframe",
+    index=timeframes.index(st.session_state.get("hist_timeframe", "1M"))
+)
     
     # Filter data based on selected timeframe
     hist_df["Date"] = pd.to_datetime(hist_df["Date"])
