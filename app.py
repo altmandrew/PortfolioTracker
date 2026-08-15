@@ -591,16 +591,16 @@ if page == "Home":
     st.subheader("Portfolio Performance")
     
     # Clean text-style timeframe selector
-timeframes = ["1W", "1M", "6M", "YTD", "1Y", "Lifetime"]
-
-timeframe = st.radio(
-    "Timeframe",
-    timeframes,
-    horizontal=True,
-    label_visibility="collapsed",
-    key="hist_timeframe",
-    index=timeframes.index(st.session_state.get("hist_timeframe", "1M"))
-)
+    timeframes = ["1W", "1M", "6M", "YTD", "1Y", "Lifetime"]
+    
+    timeframe = st.radio(
+        "Timeframe",
+        timeframes,
+        horizontal=True,
+        label_visibility="collapsed",
+        key="hist_timeframe",
+        index=timeframes.index(st.session_state.get("hist_timeframe", "1M"))
+    )
     
     # Filter data based on selected timeframe
     hist_df["Date"] = pd.to_datetime(hist_df["Date"])
