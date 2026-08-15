@@ -381,26 +381,37 @@ def merge_holdings(existing, new):
 # --- SIDEBAR ---
 st.sidebar.header("ð¥ Portfolio Management")
 
-with st.sidebar.expander("â Add Asset", expanded=False):
+with st.sidebar.expander("➕ Add Asset", expanded=False):
     with st.form("add_asset"):
         a_type = st.selectbox("Asset Type", ["Stock", "ETF", "Option", "Cash"])
-        default_sym = "CASH" if a_type == "Cash" else ""
-        default_cost = 1.0 if a_type == "Cash" else 0.0
-        if a_type == "Cash":
-            st.caption("Quantity = dollar amount")
 
-        # ---- Option-specific fields ----
+        # ---------- Option-specific fields ----------
         if a_type == "Option":
-            st.caption("Enter the underlying + expiration + strike. OCC symbol is built automatically.")
-            underlying = st.text_input("Underlying Symbol (e.g. AAPL, TQQQ)", value="").upper().strip()
+            st.caption("Enter underlying + expiration + strike. OCC symbol is built automatically.")
+            
+            underlying = st.text_input(
+                "Underlying Symbol (e.g. AAPL, TQQQ, SPY)",
+                value=""
+            ).upper().strip()
+
             exp_date = st.date_input(
                 "Expiration Date",
                 value=datetime.now().date() + timedelta(days=30),
                 min_value=datetime.now().date()
             )
-            strike = st.number_input("Strike Price", min_value=0.01, value=100.0, step=0.5, format="%.2f")
+
+            strike = st.number_input(
+                "Strike Price",
+                min_value=0.01,
+                value=100.0,
+                step=0.5,
+                format="%.2f"
+            )
+
             cp = st.selectbox("Call / Put", ["Call", "Put"])
-            # Preview the OCC symbol that will be stored
+            position = st.selectbox("Bought / Sold", ["Bought (Long)", "Sold (Short)"])
+
+            # Live OCC preview
             yy = f"{exp_date.year % 100:02d}"
             mm = f"{exp_date.month:02d}"
             dd = f"{exp_date.day:02d}"
@@ -408,27 +419,51 @@ with st.sidebar.expander("â Add Asset", expanded=False):
             strike_str = f"{strike_int:08d}"
             cp_letter = "C" if cp == "Call" else "P"
             preview_occ = f"{underlying}{yy}{mm}{dd}{cp_letter}{strike_str}" if underlying else "(enter underlying)"
-            st.code(f"OCC Symbol â {preview_occ}", language=None)
-            sym = underlying  # temporary; real OCC built on submit
+            st.code(f"OCC Symbol → {preview_occ}", language=None)
+
+            qty = st.number_input(
+                "Quantity (number of contracts)",
+                min_value=0.0,
+                step=1.0,
+                value=1.0
+            )
+
+            cost = st.number_input(
+                "Transaction Price / Avg Cost (per contract)",
+                min_value=0.0,
+                value=0.0,
+                step=0.01,
+                format="%.4f",
+                help="Premium paid (or received) per contract"
+            )
+
+        # ---------- Cash ----------
+        elif a_type == "Cash":
+            st.caption("Quantity = dollar amount")
+            sym = "CASH"
+            qty = st.number_input("Amount ($)", min_value=0.0, step=100.0, value=0.0)
+            cost = 1.0
+
+        # ---------- Stock / ETF ----------
         else:
-            sym = st.text_input("Symbol", value=default_sym).upper().strip()
+            sym = st.text_input("Symbol", value="").upper().strip()
+            qty = st.number_input("Quantity", min_value=0.0, step=1.0, value=0.0)
+            cost = st.number_input(
+                "Avg Cost (per share)",
+                min_value=0.0,
+                value=0.0,
+                step=0.01,
+                format="%.4f"
+            )
 
-        qty = st.number_input("Quantity", min_value=0.0, step=1.0, value=0.0)
-        cost = st.number_input(
-            "Avg Cost (per share / per contract for options)",
-            min_value=0.0,
-            value=default_cost
-        )
-
-        if st.form_submit_button("Add to Portfolio"):
-            if a_type == "Cash":
-                sym = "CASH"
-                cost = 1.0
-            elif a_type == "Option":
+        # ---------- Submit ----------
+        if st.form_submit_button("Add to Portfolio", type="primary"):
+            if a_type == "Option":
                 if not underlying:
                     st.error("Underlying symbol is required")
                     st.stop()
-                # Build proper OCC symbol from the selected date + strike + C/P
+
+                # Build OCC symbol
                 yy = f"{exp_date.year % 100:02d}"
                 mm = f"{exp_date.month:02d}"
                 dd = f"{exp_date.day:02d}"
@@ -436,8 +471,24 @@ with st.sidebar.expander("â Add Asset", expanded=False):
                 strike_str = f"{strike_int:08d}"
                 cp_letter = "C" if cp == "Call" else "P"
                 sym = f"{underlying}{yy}{mm}{dd}{cp_letter}{strike_str}"
+
+                # Make quantity negative for short options
+                if position == "Sold (Short)":
+                    qty = -abs(qty)
+                else:
+                    qty = abs(qty)
+
+            elif a_type == "Cash":
+                sym = "CASH"
+                cost = 1.0
+
             elif not sym:
-                st.error("Symbol required")
+                st.error("Symbol is required")
+                st.stop()
+
+            # Safety: never allow zero quantity
+            if qty == 0:
+                st.error("Quantity cannot be zero")
                 st.stop()
 
             df = load_holdings()
@@ -447,8 +498,9 @@ with st.sidebar.expander("â Add Asset", expanded=False):
                 "Quantity": qty,
                 "Average Cost": cost
             }])
+
             save_holdings(merge_holdings(df, new_row))
-            st.success(f"Added {sym}")
+            st.success(f"Added {sym} ({'Short' if qty < 0 else 'Long'} {a_type})")
             st.rerun()
 
 with st.sidebar.expander("ð Upload Brokerage CSV", expanded=True):
