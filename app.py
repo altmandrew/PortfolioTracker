@@ -498,58 +498,117 @@ if page == "🏠 Home":
             selected_symbol = st.session_state.get("last_chart_symbol", display_df.iloc[0]["Symbol"])
         st.session_state["last_chart_symbol"] = selected_symbol
 
-        # Equity Chart
-        st.markdown("---")
-        st.subheader(f"{selected_symbol}")
-
-        col_a, col_b = st.columns([3, 1])
-        with col_a:
-            tf_eq = st.radio("tf_eq", timeframes, horizontal=True, label_visibility="collapsed",
-                             key="equity_timeframe", index=timeframes.index(st.session_state.get("equity_timeframe", "1M")))
-        with col_b:
-            chart_type = st.selectbox("Chart", ["Line", "Candlestick"], label_visibility="collapsed", key="chart_type")
-
-        try:
-            period_map = {"1W":("7d","1h"), "1M":("1mo","1d"), "6M":("6mo","1d"),
-                          "YTD":("ytd","1d"), "1Y":("1y","1d"), "Lifetime":("max","1wk")}
-            period, interval = period_map[tf_eq]
-            hist = yf.Ticker(selected_symbol).history(period=period, interval=interval)
-
-            if hist.empty:
-                st.warning("No data")
+    # ============================================================
+    # EQUITY CHART
+    # ============================================================
+    st.markdown("---")
+    st.subheader("Equity Chart")
+    
+    # Text box so you can type any symbol
+    col_sym, col_tf, col_type = st.columns([2, 3, 1])
+    
+    with col_sym:
+        # Pre-fill with the last selected / clicked symbol
+        default_sym = st.session_state.get("last_chart_symbol", 
+                                           display_df.iloc[0]["Symbol"] if not holdings.empty else "AAPL")
+        typed_symbol = st.text_input(
+            "Symbol",
+            value=default_sym,
+            key="chart_symbol_input",
+            label_visibility="collapsed",
+            placeholder="e.g. AAPL, TQQQ, SPY..."
+        ).upper().strip()
+    
+    with col_tf:
+        tf_eq = st.radio(
+            "tf_eq",
+            timeframes,
+            horizontal=True,
+            label_visibility="collapsed",
+            key="equity_timeframe",
+            index=timeframes.index(st.session_state.get("equity_timeframe", "1M"))
+        )
+    
+    with col_type:
+        chart_type = st.selectbox(
+            "Chart",
+            ["Line", "Candlestick"],
+            label_visibility="collapsed",
+            key="chart_type"
+        )
+    
+    # Use the typed symbol (table click still works because it updates session state)
+    selected_symbol = typed_symbol if typed_symbol else default_sym
+    st.session_state["last_chart_symbol"] = selected_symbol
+    
+    st.caption(f"Showing: **{selected_symbol}**")
+    
+    # ---- Chart rendering (same as before) ----
+    try:
+        period_map = {
+            "1W": ("7d", "1h"),
+            "1M": ("1mo", "1d"),
+            "6M": ("6mo", "1d"),
+            "YTD": ("ytd", "1d"),
+            "1Y": ("1y", "1d"),
+            "Lifetime": ("max", "1wk")
+        }
+        period, interval = period_map[tf_eq]
+        hist = yf.Ticker(selected_symbol).history(period=period, interval=interval)
+    
+        if hist.empty:
+            st.warning(f"No price data found for {selected_symbol}")
+        else:
+            if chart_type == "Line":
+                fig2 = go.Figure(go.Scatter(
+                    x=hist.index, y=hist["Close"],
+                    mode="lines",
+                    line=dict(color="#00d1b2", width=2.2),
+                    fill="tozeroy",
+                    fillcolor="rgba(0, 209, 178, 0.07)"
+                ))
             else:
-                if chart_type == "Line":
-                    fig2 = go.Figure(go.Scatter(x=hist.index, y=hist["Close"], mode="lines",
-                                                line=dict(color="#00d1b2", width=2.2),
-                                                fill="tozeroy", fillcolor="rgba(0,209,178,0.07)"))
-                else:
-                    fig2 = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03,
-                                         row_heights=[0.7, 0.3])
-                    fig2.add_trace(go.Candlestick(x=hist.index, open=hist["Open"], high=hist["High"],
-                                                   low=hist["Low"], close=hist["Close"],
-                                                   increasing_line_color="#00d1b2", decreasing_line_color="#ff6b6b",
-                                                   name="Price"), row=1, col=1)
-                    fig2.add_trace(go.Bar(x=hist.index, y=hist["Volume"], marker_color="rgba(0,209,178,0.35)", name="Volume"),
-                                   row=2, col=1)
-                    fig2.update_xaxes(rangeslider_visible=False)
-
-                fig2.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                                   height=420, margin=dict(l=10,r=10,t=10,b=10),
-                                   xaxis=dict(showgrid=False, fixedrange=True),
-                                   yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", fixedrange=True),
-                                   showlegend=False)
-                st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
-
-                last = hist["Close"].iloc[-1]
-                prev = hist["Close"].iloc[-2] if len(hist) > 1 else last
-                chg = last - prev
-                pct = (chg / prev * 100) if prev else 0
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Last", f"${last:,.2f}")
-                c2.metric("Change", f"${chg:,.2f}", delta=f"{pct:.2f}%")
-                c3.metric("Range", f"${hist['Low'].min():,.2f} – ${hist['High'].max():,.2f}")
-        except Exception as e:
-            st.warning(f"Chart error: {e}")
+                fig2 = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                                     vertical_spacing=0.03, row_heights=[0.72, 0.28])
+                fig2.add_trace(go.Candlestick(
+                    x=hist.index,
+                    open=hist["Open"], high=hist["High"],
+                    low=hist["Low"], close=hist["Close"],
+                    increasing_line_color="#00d1b2",
+                    decreasing_line_color="#ff6b6b",
+                    name="Price"
+                ), row=1, col=1)
+                fig2.add_trace(go.Bar(
+                    x=hist.index, y=hist["Volume"],
+                    marker_color="rgba(0, 209, 178, 0.35)",
+                    name="Volume"
+                ), row=2, col=1)
+                fig2.update_xaxes(rangeslider_visible=False)
+    
+            fig2.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                height=420,
+                margin=dict(l=10, r=10, t=10, b=10),
+                xaxis=dict(showgrid=False, fixedrange=True),
+                yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", fixedrange=True),
+                showlegend=False
+            )
+            st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
+    
+            # Quick stats
+            last = hist["Close"].iloc[-1]
+            prev = hist["Close"].iloc[-2] if len(hist) > 1 else last
+            chg = last - prev
+            pct = (chg / prev * 100) if prev else 0
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Last", f"${last:,.2f}")
+            c2.metric("Change", f"${chg:,.2f}", delta=f"{pct:.2f}%")
+            c3.metric("Range", f"${hist['Low'].min():,.2f} – ${hist['High'].max():,.2f}")
+    
+    except Exception as e:
+        st.warning(f"Could not load chart for {selected_symbol}: {e}")
 
 # -------------------- NEWS --------------------
 elif page == "📰 News":
