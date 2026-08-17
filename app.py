@@ -473,13 +473,16 @@ if page == "🏠 Home":
         port_chart_type = st.selectbox(
             "Chart Type",
             ["Candlestick", "Line"],
-            index=0,                          # ← default to Candlestick
+            index=0,                          # default to Candlestick
             label_visibility="collapsed",
             key="port_chart_type"
         )
 
     if not hist_df.empty:
+        hist_df = hist_df.copy()
         hist_df["Date"] = pd.to_datetime(hist_df["Date"])
+        hist_df = hist_df.sort_values("Date").reset_index(drop=True)
+
         now = datetime.now()
         start_map = {
             "1W": now - timedelta(days=7),
@@ -491,39 +494,58 @@ if page == "🏠 Home":
         }
         filtered = hist_df[hist_df["Date"] >= start_map[tf]].copy()
 
-        # We only have one value per day, so for "Candlestick" we still show a clean line
-        # (true OHLC isn't available for total portfolio value)
-        fig = go.Figure()
+        if len(filtered) < 2:
+            st.info("Not enough history for this timeframe yet.")
+        else:
+            # ----- Build synthetic OHLC -----
+            # Open  = previous day's close
+            # Close = today's value
+            # High  = max(Open, Close)
+            # Low   = min(Open, Close)
+            filtered["Close"] = filtered["Value"]
+            filtered["Open"] = filtered["Close"].shift(1)
+            filtered["Open"] = filtered["Open"].fillna(filtered["Close"].iloc[0])  # first day
+            filtered["High"] = filtered[["Open", "Close"]].max(axis=1)
+            filtered["Low"]  = filtered[["Open", "Close"]].min(axis=1)
 
-        if port_chart_type == "Line":
-            fig.add_trace(go.Scatter(
-                x=filtered["Date"], y=filtered["Value"],
-                mode="lines",
-                line=dict(color="#00d1b2", width=2.5),
-                fill="tozeroy",
-                fillcolor="rgba(0, 209, 178, 0.08)"
-            ))
-        else:  # Candlestick style → still line but with thicker look + markers
-            fig.add_trace(go.Scatter(
-                x=filtered["Date"], y=filtered["Value"],
-                mode="lines+markers",
-                line=dict(color="#00d1b2", width=2.8),
-                marker=dict(size=4, color="#00d1b2"),
-                fill="tozeroy",
-                fillcolor="rgba(0, 209, 178, 0.10)"
-            ))
+            fig = go.Figure()
 
-        fig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            height=340,
-            margin=dict(l=10, r=10, t=10, b=10),
-            xaxis=dict(showgrid=False, fixedrange=True),
-            yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", fixedrange=True),
-            showlegend=False
-        )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            if port_chart_type == "Line":
+                fig.add_trace(go.Scatter(
+                    x=filtered["Date"],
+                    y=filtered["Close"],
+                    mode="lines",
+                    line=dict(color="#00d1b2", width=2.5),
+                    fill="tozeroy",
+                    fillcolor="rgba(0, 209, 178, 0.08)"
+                ))
+            else:
+                # Real candlestick
+                fig.add_trace(go.Candlestick(
+                    x=filtered["Date"],
+                    open=filtered["Open"],
+                    high=filtered["High"],
+                    low=filtered["Low"],
+                    close=filtered["Close"],
+                    increasing_line_color="#00d1b2",
+                    decreasing_line_color="#ff6b6b",
+                    increasing_fillcolor="#00d1b2",
+                    decreasing_fillcolor="#ff6b6b",
+                    name="Portfolio"
+                ))
+                fig.update_xaxes(rangeslider_visible=False)
+
+            fig.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                height=360,
+                margin=dict(l=10, r=10, t=10, b=10),
+                xaxis=dict(showgrid=False, fixedrange=True),
+                yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", fixedrange=True),
+                showlegend=False
+            )
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     # Current Positions
     st.subheader("Current Positions")
