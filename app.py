@@ -453,27 +453,76 @@ if page == "🏠 Home":
         c4.metric("Positions", len(holdings))
         st.caption(f"Updated {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
-    # Portfolio Performance
+    # ============================================================
+    # PORTFOLIO PERFORMANCE CHART
+    # ============================================================
     st.subheader("Portfolio Performance")
-    timeframes = ["1W", "1M", "6M", "YTD", "1Y", "Lifetime"]
-    tf = st.radio("tf_port", timeframes, horizontal=True, label_visibility="collapsed",
-                  key="hist_timeframe", index=timeframes.index(st.session_state.get("hist_timeframe", "1M")))
+
+    col_tf, col_type = st.columns([4, 1])
+    with col_tf:
+        timeframes = ["1W", "1M", "6M", "YTD", "1Y", "Lifetime"]
+        tf = st.radio(
+            "tf_port",
+            timeframes,
+            horizontal=True,
+            label_visibility="collapsed",
+            key="hist_timeframe",
+            index=timeframes.index(st.session_state.get("hist_timeframe", "1M"))
+        )
+    with col_type:
+        port_chart_type = st.selectbox(
+            "Chart Type",
+            ["Candlestick", "Line"],
+            index=0,                          # ← default to Candlestick
+            label_visibility="collapsed",
+            key="port_chart_type"
+        )
 
     if not hist_df.empty:
         hist_df["Date"] = pd.to_datetime(hist_df["Date"])
         now = datetime.now()
-        start_map = {"1W": now-timedelta(days=7), "1M": now-timedelta(days=30),
-                     "6M": now-timedelta(days=180), "YTD": datetime(now.year,1,1),
-                     "1Y": now-timedelta(days=365), "Lifetime": hist_df["Date"].min()}
-        filtered = hist_df[hist_df["Date"] >= start_map[tf]]
-        fig = go.Figure(go.Scatter(x=filtered["Date"], y=filtered["Value"], mode="lines",
-                                   line=dict(color="#00d1b2", width=2.5),
-                                   fill="tozeroy", fillcolor="rgba(0,209,178,0.08)"))
-        fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                          height=340, margin=dict(l=10,r=10,t=10,b=10),
-                          xaxis=dict(showgrid=False, fixedrange=True),
-                          yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", fixedrange=True),
-                          showlegend=False)
+        start_map = {
+            "1W": now - timedelta(days=7),
+            "1M": now - timedelta(days=30),
+            "6M": now - timedelta(days=180),
+            "YTD": datetime(now.year, 1, 1),
+            "1Y": now - timedelta(days=365),
+            "Lifetime": hist_df["Date"].min()
+        }
+        filtered = hist_df[hist_df["Date"] >= start_map[tf]].copy()
+
+        # We only have one value per day, so for "Candlestick" we still show a clean line
+        # (true OHLC isn't available for total portfolio value)
+        fig = go.Figure()
+
+        if port_chart_type == "Line":
+            fig.add_trace(go.Scatter(
+                x=filtered["Date"], y=filtered["Value"],
+                mode="lines",
+                line=dict(color="#00d1b2", width=2.5),
+                fill="tozeroy",
+                fillcolor="rgba(0, 209, 178, 0.08)"
+            ))
+        else:  # Candlestick style → still line but with thicker look + markers
+            fig.add_trace(go.Scatter(
+                x=filtered["Date"], y=filtered["Value"],
+                mode="lines+markers",
+                line=dict(color="#00d1b2", width=2.8),
+                marker=dict(size=4, color="#00d1b2"),
+                fill="tozeroy",
+                fillcolor="rgba(0, 209, 178, 0.10)"
+            ))
+
+        fig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            height=340,
+            margin=dict(l=10, r=10, t=10, b=10),
+            xaxis=dict(showgrid=False, fixedrange=True),
+            yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", fixedrange=True),
+            showlegend=False
+        )
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     # Current Positions
@@ -532,7 +581,8 @@ if page == "🏠 Home":
     with col_type:
         chart_type = st.selectbox(
             "Chart",
-            ["Line", "Candlestick"],
+            ["Candlestick", "Line"],          # Candlestick first
+            index=0,                          # ← default to Candlestick
             label_visibility="collapsed",
             key="chart_type"
         )
