@@ -610,6 +610,135 @@ if page == "🏠 Home":
     except Exception as e:
         st.warning(f"Could not load chart for {selected_symbol}: {e}")
 
+        # ============================================================
+    # CURRENT PORTFOLIO ANALYSIS
+    # ============================================================
+    st.markdown("---")
+    st.subheader("Portfolio Analysis")
+
+    if holdings.empty:
+        st.info("Add holdings to see analysis.")
+    else:
+        total = holdings["Market Value"].sum()
+        cash_val = holdings.loc[holdings["Type"] == "Cash", "Market Value"].sum()
+        bond_val = holdings.loc[holdings["Symbol"].str.contains("BND|AGG|TLT|IEF|BNDX", case=False, na=False), "Market Value"].sum()
+        option_val = holdings.loc[holdings["Type"] == "Option", "Market Value"].sum()
+        equity_val = total - cash_val - bond_val - option_val
+
+        cash_pct = cash_val / total * 100 if total > 0 else 0
+        bond_pct = bond_val / total * 100 if total > 0 else 0
+        option_pct = option_val / total * 100 if total > 0 else 0
+        equity_pct = equity_val / total * 100 if total > 0 else 0
+
+        has_leveraged_options = any(
+            (holdings["Type"] == "Option") &
+            (holdings["Symbol"].str.contains("TQQQ|SQQQ|UPRO|SPXU|TNA|TZA", case=False, na=False))
+        )
+
+        if has_leveraged_options and option_pct > 10:
+            style = "Aggressive / High-Beta Growth"
+            best_market = "Strong Bull Market"
+            description = "Built for maximum upside, driven by leveraged long calls."
+            risks = "High volatility and large drawdown risk in corrections."
+        elif equity_pct > 70 and option_pct < 10 and bond_pct < 20:
+            style = "Growth-Oriented Equity"
+            best_market = "Bull Market"
+            description = "Primarily equity-focused with limited defensive holdings."
+            risks = "Vulnerable to broad market pullbacks."
+        elif bond_pct > 30 or (bond_pct + cash_pct) > 40:
+            style = "Balanced / Defensive"
+            best_market = "Sideways to Mildly Bearish"
+            description = "Meaningful allocation to bonds/cash provides ballast."
+            risks = "Will lag in strong bull markets."
+        else:
+            style = "Moderately Aggressive"
+            best_market = "Bull Market with moderate volatility"
+            description = "Mix of growth exposure and some defensive elements."
+            risks = "Still carries meaningful equity risk."
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Portfolio Style", style)
+            st.metric("Best Suited Market", best_market)
+        with col2:
+            st.markdown("**Current Allocation**")
+            st.write(f"• Equity / Other: **{equity_pct:.1f}%**")
+            st.write(f"• Options: **{option_pct:.1f}%**")
+            st.write(f"• Bonds: **{bond_pct:.1f}%**")
+            st.write(f"• Cash: **{cash_pct:.1f}%**")
+
+        st.markdown(f"**Analysis:** {description}")
+        st.markdown(f"**Key Risk:** {risks}")
+
+
+    # ============================================================
+    # PORTFOLIO PROJECTION (auto-runs with defaults)
+    # ============================================================
+    st.markdown("---")
+    st.subheader("Portfolio Projection")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        annual_contribution = st.slider(
+            "Annual Contribution ($)", 0, 100000, 22000, 1000
+        )
+    with col2:
+        expected_return = st.slider(
+            "Expected Annual Return (%)", 0.0, 25.0, 12.0, 0.5
+        )
+    with col3:
+        years = st.slider(
+            "Time Horizon (Years)", 1, 50, 25
+        )
+
+    # Auto-run on every load / change
+    start_value = total_value if total_value > 0 else 0
+    r = expected_return / 100
+    years_list = list(range(0, years + 1))
+    values = []
+
+    for y in years_list:
+        if r == 0:
+            fv = start_value + annual_contribution * y
+        else:
+            fv = start_value * (1 + r)**y + annual_contribution * (((1 + r)**y - 1) / r)
+        values.append(fv)
+
+    final_value = values[-1]
+    total_contributed = annual_contribution * years
+    growth = final_value - start_value - total_contributed
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Starting Value", f"${start_value:,.0f}")
+    m2.metric("Total Contributions", f"${total_contributed:,.0f}")
+    m3.metric("Investment Growth", f"${growth:,.0f}")
+    m4.metric(f"Value in {years} Years", f"${final_value:,.0f}")
+
+    fig_proj = go.Figure()
+    fig_proj.add_trace(go.Scatter(
+        x=years_list,
+        y=values,
+        mode="lines",
+        line=dict(color="#00d1b2", width=2.5),
+        fill="tozeroy",
+        fillcolor="rgba(0, 209, 178, 0.08)",
+        name="Projected Value"
+    ))
+    fig_proj.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        height=380,
+        margin=dict(l=10, r=10, t=20, b=10),
+        xaxis_title="Years from Now",
+        yaxis_title=None,
+        xaxis=dict(showgrid=False, fixedrange=True),
+        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", fixedrange=True),
+        showlegend=False
+    )
+    st.plotly_chart(fig_proj, use_container_width=True, config={"displayModeBar": False})
+    st.caption("Assumptions: contributions at end of each year • returns compounded annually")
+
 # -------------------- NEWS --------------------
 elif page == "📰 News":
     st.title("Market News")
