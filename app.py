@@ -549,48 +549,76 @@ with tab_home:
         st.caption(f"Showing: **{selected_symbol}**")
 
         try:
-            period_map = {"1W":("7d","30m"), "1M":("1mo","1h"), "6M":("6mo","1d"),
-                          "YTD":("ytd","1d"), "1Y":("1y","1d"), "3y":("3y","1d"), "Lifetime":("max","1wk")}
-            period, interval = period_map[tf_eq]
-            hist = yf.Ticker(selected_symbol).history(period=period, interval=interval)
-
-            if hist.empty:
-                st.warning(f"No data for {selected_symbol}")
+        period_map = {
+            "1W": ("7d", "1h"),
+            "1M": ("1mo", "1d"),
+            "6M": ("6mo", "1d"),
+            "YTD": ("ytd", "1d"),
+            "1Y": ("1y", "1d"),
+            "3Y": ("3y", "1d"),
+            "Lifetime": ("max", "1wk")
+        }
+        period, interval = period_map[tf_eq]
+        hist = yf.Ticker(selected_symbol).history(period=period, interval=interval)
+    
+        if hist.empty:
+            st.warning(f"No data for {selected_symbol}")
+        else:
+            if chart_type == "Line":
+                fig2 = go.Figure(go.Scatter(
+                    x=hist.index, y=hist["Close"],
+                    mode="lines",
+                    line=dict(color="#00d1b2", width=2.2),
+                    fill="tozeroy",
+                    fillcolor="rgba(0, 209, 178, 0.07)"
+                ))
             else:
-                if chart_type == "Line":
-                    fig2 = go.Figure(go.Scatter(x=hist.index, y=hist["Close"], mode="lines",
-                                                line=dict(color="#00d1b2", width=2.2),
-                                                fill="tozeroy", fillcolor="rgba(0,209,178,0.07)"))
-                else:
-                    fig2 = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                                         vertical_spacing=0.03, row_heights=[0.72, 0.28])
-                    fig2.add_trace(go.Candlestick(
-                        x=hist.index, open=hist["Open"], high=hist["High"],
-                        low=hist["Low"], close=hist["Close"],
-                        increasing_line_color="#00d1b2", decreasing_line_color="#ff6b6b"),
-                        row=1, col=1)
-                    fig2.add_trace(go.Bar(x=hist.index, y=hist["Volume"],
-                                          marker_color="rgba(0,209,178,0.35)"), row=2, col=1)
-                    fig2.update_xaxes(rangeslider_visible=False)
-
-                fig2.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-                                   plot_bgcolor="rgba(0,0,0,0)", height=420,
-                                   margin=dict(l=10,r=10,t=10,b=10),
-                                   xaxis=dict(showgrid=False, fixedrange=True),
-                                   yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", fixedrange=True),
-                                   showlegend=False)
-                st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
-
-                last = hist["Close"].iloc[-1]
-                prev = hist["Close"].iloc[-2] if len(hist) > 1 else last
-                chg = last - prev
-                pct = (chg / prev * 100) if prev else 0
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Last", f"${last:,.2f}")
-                c2.metric("Change", f"${chg:,.2f}", delta=f"{pct:.2f}%")
-                c3.metric("Range", f"${hist['Low'].min():,.2f} – ${hist['High'].max():,.2f}")
-        except Exception as e:
-            st.warning(f"Chart error: {e}")
+                fig2 = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                                     vertical_spacing=0.03, row_heights=[0.72, 0.28])
+                fig2.add_trace(go.Candlestick(
+                    x=hist.index,
+                    open=hist["Open"], high=hist["High"],
+                    low=hist["Low"], close=hist["Close"],
+                    increasing_line_color="#00d1b2",
+                    decreasing_line_color="#ff6b6b"
+                ), row=1, col=1)
+                fig2.add_trace(go.Bar(
+                    x=hist.index, y=hist["Volume"],
+                    marker_color="rgba(0, 209, 178, 0.35)"
+                ), row=2, col=1)
+                fig2.update_xaxes(rangeslider_visible=False)
+    
+            # ★ Hide non-trading days
+            fig2.update_xaxes(
+                rangebreaks=[
+                    dict(bounds=["sat", "mon"]),  # weekends
+                ]
+            )
+    
+            fig2.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                height=420,
+                margin=dict(l=10, r=10, t=10, b=10),
+                xaxis=dict(showgrid=False, fixedrange=True),
+                yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", fixedrange=True),
+                showlegend=False
+            )
+            st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
+    
+            # stats...
+            last = hist["Close"].iloc[-1]
+            prev = hist["Close"].iloc[-2] if len(hist) > 1 else last
+            chg = last - prev
+            pct = (chg / prev * 100) if prev else 0
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Last", f"${last:,.2f}")
+            c2.metric("Change", f"${chg:,.2f}", delta=f"{pct:.2f}%")
+            c3.metric("Range", f"${hist['Low'].min():,.2f} – ${hist['High'].max():,.2f}")
+    
+    except Exception as e:
+        st.warning(f"Chart error: {e}")
 
     # ============================================================
     # CNN FEAR & GREED INDEX (Last 30 Days)
