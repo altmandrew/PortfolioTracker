@@ -532,7 +532,7 @@ with tab_home:
 
         col_sym, col_tf, col_type = st.columns([2, 3, 1])
         with col_sym:
-            default_sym = st.session_state.get("last_chart_symbol", "AAPL")
+            default_sym = st.session_state.get("QQQ", "AAPL")
             typed_symbol = st.text_input("Symbol", value=default_sym, key="chart_symbol_input",
                                          label_visibility="collapsed",
                                          placeholder="AAPL, TQQQ, SPY...").upper().strip()
@@ -550,7 +550,7 @@ with tab_home:
 
         try:
             period_map = {"1W":("7d","30m"), "1M":("1mo","1h"), "6M":("6mo","1d"),
-                          "YTD":("ytd","1d"), "1Y":("1y","1d"), "Lifetime":("max","1wk")}
+                          "YTD":("ytd","1d"), "1Y":("1y","1d"), "3y":("3y","1d"), "Lifetime":("max","1wk")}
             period, interval = period_map[tf_eq]
             hist = yf.Ticker(selected_symbol).history(period=period, interval=interval)
 
