@@ -549,7 +549,7 @@ with tab_home:
         st.caption(f"Showing: **{selected_symbol}**")
 
         try:
-            period_map = {"1W":("7d","1h"), "1M":("1mo","1d"), "6M":("6mo","1d"),
+            period_map = {"1W":("7d","30m"), "1M":("1mo","1h"), "6M":("6mo","1d"),
                           "YTD":("ytd","1d"), "1Y":("1y","1d"), "Lifetime":("max","1wk")}
             period, interval = period_map[tf_eq]
             hist = yf.Ticker(selected_symbol).history(period=period, interval=interval)
