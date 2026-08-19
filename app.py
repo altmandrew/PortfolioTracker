@@ -337,7 +337,7 @@ def import_transactions_csv(uploaded_file):
     return pd.DataFrame(records)
 
 # -------------------- SIDEBAR TOOLS --------------------
-st.sidebar.header("📥 Portfolio Management")
+st.sidebar.header("Portfolio Management")
 
 with st.sidebar.expander("➕ Add Asset", expanded=False):
     a_type = st.selectbox("Asset Type", ["Stock", "ETF", "Option", "Cash"], key="add_asset_type")
@@ -393,7 +393,7 @@ with st.sidebar.expander("➕ Add Asset", expanded=False):
             st.success(f"Added {sym}")
             st.rerun()
 
-with st.sidebar.expander("📜 Upload Transactions CSV", expanded=True):
+with st.sidebar.expander("➕Upload Transactions CSV", expanded=False):
     file_tx = st.file_uploader("Transactions CSV", type=["csv"], key="tx_uploader")
     if file_tx is not None:
         if st.button("🚀 Process Transactions", type="primary", use_container_width=True):
@@ -414,13 +414,13 @@ if not holdings_preview.empty:
             save_holdings(holdings_preview[holdings_preview["Symbol"] != to_delete])
             st.rerun()
 
-if st.sidebar.button("🗑️ Reset My Data", type="secondary"):
+if st.sidebar.button("➖Reset My Data", type="secondary"):
     save_holdings(pd.DataFrame(columns=["Symbol", "Type", "Quantity", "Average Cost"]))
     st.rerun()
 
 
 # -------------------- TABS --------------------
-tab_home, tab_news = st.tabs(["🏠 Home", "📰 News"])
+tab_home, tab_news = st.tabs(["Home", "News"])
 
 # ==================== HOME TAB ====================
 with tab_home:
@@ -528,7 +528,7 @@ with tab_home:
 
         # ----- Equity Chart -----
         st.markdown("---")
-        st.subheader("Equity Chart")
+        st.subheader("Stock Chart")
 
         col_sym, col_tf, col_type = st.columns([2, 3, 1])
         with col_sym:
